@@ -1,0 +1,995 @@
+/*
+ * Reader view styles. Loaded inside the reader's shadow root, so nothing here
+ * leaks into Google Sites and Sites styles do not leak in.
+ *
+ * Colors are tokens on .root; content.js resolves the theme mode (auto/light/
+ * dark) and sets data-theme to "light" or "dark".
+ */
+
+:host {
+  all: initial;
+  display: block;
+}
+
+.root {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --topbar-h: 56px;
+  --sidebar-w: 248px;
+  --toc-w: 240px;
+  --radius: 10px;
+}
+
+.root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-raised: #f6f8fa;
+  --text: #1f2328;
+  --text-strong: #1f2328;
+  --text-muted: #59636e;
+  --border: #d1d9e0;
+  --hover: rgba(129, 139, 152, 0.12);
+  --accent: #0969da;
+  --accent-soft: rgba(9, 105, 218, 0.09);
+  --code-bg: #f6f8fa;
+  --inline-code-bg: rgba(129, 139, 152, 0.15);
+  --inline-code-text: #1f2328;
+  --mark-bg: #fff8c5;
+  --red: #d1242f;
+  --table-head-bg: #f6f8fa;
+  --table-stripe: rgba(129, 139, 152, 0.05);
+  --note-bg: #ddf4ff;
+  --note-border: #b6e3ff;
+  --warning-bg: #fff8c5;
+  --warning-border: #eed888;
+  --danger-bg: #ffebe9;
+  --danger-border: #ffcecb;
+  --tip-bg: #dafbe1;
+  --tip-border: #aceebb;
+  --skeleton: #eef1f4;
+  --skeleton-hi: #f6f8fa;
+  --shadow: 0 8px 24px rgba(140, 149, 159, 0.22);
+  --image-filter: none;
+  --syn-keyword: #cf222e;
+  --syn-title: #8250df;
+  --syn-constant: #0550ae;
+  --syn-string: #0a3069;
+  --syn-builtin: #953800;
+  --syn-comment: #59636e;
+  --syn-tag: #116329;
+}
+
+.root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #22272e;
+  --bg-raised: #2d333b;
+  --text: #adbac7;
+  --text-strong: #cdd9e5;
+  --text-muted: #768390;
+  --border: #373e47;
+  --hover: rgba(99, 110, 123, 0.2);
+  --accent: #539bf5;
+  --accent-soft: rgba(65, 132, 228, 0.15);
+  --code-bg: #2d333b;
+  --inline-code-bg: rgba(99, 110, 123, 0.4);
+  --inline-code-text: #cdd9e5;
+  --mark-bg: rgba(198, 144, 38, 0.3);
+  --red: #f47067;
+  --table-head-bg: #2d333b;
+  --table-stripe: rgba(99, 110, 123, 0.08);
+  --note-bg: rgba(65, 132, 228, 0.15);
+  --note-border: rgba(65, 132, 228, 0.4);
+  --warning-bg: rgba(198, 144, 38, 0.12);
+  --warning-border: rgba(198, 144, 38, 0.4);
+  --danger-bg: rgba(229, 83, 75, 0.1);
+  --danger-border: rgba(229, 83, 75, 0.4);
+  --tip-bg: rgba(70, 149, 74, 0.15);
+  --tip-border: rgba(70, 149, 74, 0.4);
+  --skeleton: #2d333b;
+  --skeleton-hi: #373e47;
+  --shadow: 0 8px 24px rgba(28, 33, 40, 0.6);
+  --image-filter: brightness(0.9);
+  --syn-keyword: #f47067;
+  --syn-title: #dcbdfb;
+  --syn-constant: #6cb6ff;
+  --syn-string: #96d0ff;
+  --syn-builtin: #f69d50;
+  --syn-comment: #768390;
+  --syn-tag: #8ddb8c;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Shell                                                                    */
+
+.app {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font: 16.5px/1.7 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+:host(:not([data-active])) .app {
+  display: none;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--topbar-h);
+  padding: 0 16px;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  color: var(--text-strong);
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.crumb-sep {
+  color: var(--border);
+}
+
+.crumb {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.tool {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: 500 13.5px/1 var(--font-sans);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.tool:hover {
+  background: var(--hover);
+}
+
+.tool.icon-only {
+  width: 34px;
+  padding: 0;
+}
+
+.tool svg,
+.restore svg {
+  flex: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.menu-btn {
+  display: none;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--toc-w);
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+.sidebar,
+.toc {
+  position: sticky;
+  top: var(--topbar-h);
+  height: calc(100vh - var(--topbar-h));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.sidebar {
+  padding: 28px 12px 28px 16px;
+  border-right: 1px solid var(--border);
+  font-size: 14.5px;
+}
+
+.sidebar-title,
+.toc-title {
+  margin: 0 0 10px 10px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.nav-tree {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav-tree .nav-tree {
+  margin: 2px 0 4px 16px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+.nav-link,
+.nav-group {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 7px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.nav-link[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.nav-tree summary {
+  display: flex;
+  align-items: center;
+  border-radius: 7px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.nav-tree summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-tree summary:hover {
+  background: var(--hover);
+}
+
+.nav-tree summary > * {
+  flex: 1;
+}
+
+.nav-tree summary::after {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: 12px;
+  border-right: 1.5px solid var(--text-muted);
+  border-bottom: 1.5px solid var(--text-muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+
+.nav-tree details[open] > summary::after {
+  transform: rotate(45deg);
+}
+
+/* Slide groups open and closed; content-visibility keeps the children visible
+   until the collapse has finished. Browsers without ::details-content snap. */
+.nav-tree details {
+  interpolate-size: allow-keywords;
+}
+
+.nav-tree details::details-content {
+  height: 0;
+  overflow: clip;
+  opacity: 0;
+  transition:
+    height 0.22s ease,
+    opacity 0.22s ease,
+    content-visibility 0.22s allow-discrete;
+}
+
+.nav-tree details[open]::details-content {
+  height: auto;
+  opacity: 1;
+}
+
+.main {
+  min-width: 0;
+  padding: 44px 48px 120px;
+}
+
+.toc {
+  padding: 44px 16px 28px 8px;
+  font-size: 13.5px;
+}
+
+.toc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-left: 1px solid var(--border);
+}
+
+.toc-list a {
+  display: block;
+  margin-left: -1px;
+  padding: 4px 10px;
+  border-left: 2px solid transparent;
+  color: var(--text-muted);
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+.toc-list a:hover {
+  color: var(--text);
+}
+
+.toc-list a[aria-current] {
+  border-left-color: var(--accent);
+  color: var(--accent);
+  font-weight: 550;
+}
+
+.toc-list .level-1 a {
+  padding-left: 22px;
+}
+
+.toc-list .level-2 a {
+  padding-left: 34px;
+  font-size: 0.95em;
+}
+
+.backdrop {
+  display: none;
+}
+
+.restore {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 2147483000;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font: 600 14px/1 var(--font-sans);
+  cursor: pointer;
+}
+
+:host(:not([data-active])) .restore {
+  display: inline-flex;
+}
+
+@media (max-width: 1260px) {
+  .layout {
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  }
+
+  .toc {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .menu-btn {
+    display: inline-flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: var(--topbar-h);
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    width: min(300px, 86vw);
+    height: auto;
+    background: var(--bg);
+    box-shadow: var(--shadow);
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+  }
+
+  .app.nav-open .sidebar {
+    transform: none;
+  }
+
+  .app.nav-open .backdrop {
+    position: fixed;
+    inset: var(--topbar-h) 0 0 0;
+    z-index: 25;
+    display: block;
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  .main {
+    padding: 28px 20px 96px;
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    padding: 0 12px;
+  }
+
+  .crumb-sep,
+  .crumb {
+    display: none;
+  }
+
+  .brand {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tool .label {
+    display: none;
+  }
+
+  .tool {
+    width: 34px;
+    padding: 0;
+  }
+
+  .main {
+    padding: 24px 16px 80px;
+  }
+
+  .app {
+    font-size: 16px;
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Loading and errors                                                       */
+
+.skeleton {
+  display: grid;
+  gap: 14px;
+  max-width: 46rem;
+  margin: 0 auto;
+}
+
+.skeleton span {
+  height: 14px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--skeleton) 25%, var(--skeleton-hi) 50%, var(--skeleton) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.skeleton span:first-child {
+  height: 30px;
+  margin-bottom: 12px;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.load-error {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 18px 20px;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius);
+  background: var(--danger-bg);
+}
+
+.load-error-title {
+  margin: 0 0 4px;
+  color: var(--text-strong);
+  font-weight: 650;
+}
+
+.load-error-detail {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.load-error-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Document                                                                 */
+
+.doc {
+  max-width: 46rem;
+  margin: 0 auto;
+  overflow-wrap: break-word;
+}
+
+.doc > :first-child {
+  margin-top: 0;
+}
+
+.doc p {
+  margin: 0 0 1em;
+}
+
+.doc h1,
+.doc h2,
+.doc h3,
+.doc h4,
+.doc h5,
+.doc h6 {
+  margin: 2.1em 0 0.6em;
+  color: var(--text-strong);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  scroll-margin-top: calc(var(--topbar-h) + 20px);
+}
+
+.doc h1 {
+  font-size: 1.75em;
+}
+
+.doc h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+  font-size: 1.4em;
+}
+
+.doc h3 {
+  font-size: 1.17em;
+}
+
+.doc h4 {
+  font-size: 1.02em;
+}
+
+.doc h5,
+.doc h6 {
+  color: var(--text-muted);
+  font-size: 0.95em;
+}
+
+.doc .doc-title {
+  margin: 0 0 0.3em;
+  color: var(--text-strong);
+  font-size: 2.15em;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.doc .doc-subtitle {
+  margin: -0.1em 0 1.2em;
+  color: var(--text-muted);
+  font-size: 1.2em;
+}
+
+.doc .doc-title + h1,
+.doc .doc-subtitle + h1 {
+  margin-top: 0;
+}
+
+.doc hr {
+  height: 0;
+  margin: 2.4em 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.doc hr + h1,
+.doc hr + h2,
+.doc hr + h3 {
+  margin-top: 0;
+}
+
+.doc a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.doc a:hover {
+  text-decoration-color: currentColor;
+}
+
+.doc strong {
+  color: var(--text-strong);
+  font-weight: 650;
+}
+
+.doc mark {
+  padding: 0.05em 0.2em;
+  border-radius: 3px;
+  background: var(--mark-bg);
+  color: inherit;
+}
+
+.doc .text-red,
+.doc .text-red strong {
+  color: var(--red);
+}
+
+.doc a strong {
+  color: inherit;
+}
+
+/* Students type what they see: no ligatures such as << rendered as a single glyph. */
+.doc code,
+.doc pre {
+  font-feature-settings: "liga" 0, "calt" 0;
+  font-variant-ligatures: none;
+}
+
+.doc code {
+  padding: 0.12em 0.38em;
+  border-radius: 5px;
+  background: var(--inline-code-bg);
+  color: var(--inline-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.87em;
+}
+
+.doc a code {
+  color: inherit;
+}
+
+.doc .code-block {
+  position: relative;
+  margin: 0 0 1.2em;
+}
+
+.doc pre {
+  margin: 0 0 1.2em;
+  padding: 14px 18px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  color: var(--text-strong);
+  font: 14px/1.6 var(--font-mono);
+  tab-size: 4;
+}
+
+.doc .code-block pre {
+  margin: 0;
+  padding-right: 52px;
+}
+
+.doc pre code {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* Syntax highlighting (highlight.js class names). */
+.doc .hljs-keyword,
+.doc .hljs-type,
+.doc .hljs-doctag,
+.doc .hljs-meta,
+.doc .hljs-meta .hljs-keyword,
+.doc .hljs-variable.language_ {
+  color: var(--syn-keyword);
+}
+
+.doc .hljs-title,
+.doc .hljs-title.function_,
+.doc .hljs-title.class_ {
+  color: var(--syn-title);
+}
+
+.doc .hljs-number,
+.doc .hljs-literal,
+.doc .hljs-attr,
+.doc .hljs-variable,
+.doc .hljs-template-variable,
+.doc .hljs-operator,
+.doc .hljs-section {
+  color: var(--syn-constant);
+}
+
+.doc .hljs-string,
+.doc .hljs-regexp,
+.doc .hljs-meta .hljs-string {
+  color: var(--syn-string);
+}
+
+.doc .hljs-built_in,
+.doc .hljs-symbol {
+  color: var(--syn-builtin);
+}
+
+/* In shell commands the grammar marks only some command words as builtins
+   (`make test` but not `make clean`), which reads as random; keep them plain. */
+.doc .language-bash .hljs-built_in {
+  color: inherit;
+}
+
+.doc .hljs-comment {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+
+.doc .hljs-name,
+.doc .hljs-selector-tag {
+  color: var(--syn-tag);
+}
+
+.doc .hljs-subst,
+.doc .hljs-params {
+  color: inherit;
+}
+
+.doc .copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.doc .code-block:hover .copy-btn,
+.doc .copy-btn:focus-visible,
+.doc .copy-btn.copied {
+  opacity: 1;
+}
+
+.doc .copy-btn.copied {
+  color: var(--accent);
+}
+
+@media (hover: none) {
+  .doc .copy-btn {
+    opacity: 1;
+  }
+}
+
+.doc ul,
+.doc ol {
+  margin: 0 0 1em;
+  padding-left: 1.6em;
+}
+
+.doc li {
+  margin: 0.3em 0;
+}
+
+.doc li > ul,
+.doc li > ol {
+  margin: 0.3em 0 0;
+}
+
+.doc ul ul {
+  list-style-type: circle;
+}
+
+.doc ul ul ul {
+  list-style-type: square;
+}
+
+.doc li::marker {
+  color: var(--text-muted);
+}
+
+.doc img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  filter: var(--image-filter);
+}
+
+.doc p.media {
+  text-align: center;
+}
+
+.doc .align-center {
+  text-align: center;
+}
+
+.doc .align-right {
+  text-align: right;
+}
+
+.doc .table-wrap {
+  margin: 0 0 1.4em;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.doc table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.94em;
+  line-height: 1.55;
+}
+
+.doc th,
+.doc td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.doc th + th,
+.doc td + td {
+  border-left: 1px solid var(--border);
+}
+
+.doc tr:last-child > td {
+  border-bottom: 0;
+}
+
+.doc th {
+  background: var(--table-head-bg);
+  color: var(--text-strong);
+  font-weight: 650;
+}
+
+.doc tbody tr:nth-child(even) {
+  background: var(--table-stripe);
+}
+
+.doc td > :last-child,
+.doc th > :last-child,
+.doc .callout > :last-child {
+  margin-bottom: 0;
+}
+
+.doc .callout {
+  --callout-bg: var(--note-bg);
+  --callout-border: var(--note-border);
+  margin: 0 0 1.4em;
+  padding: 16px 20px;
+  border: 1px solid var(--callout-border);
+  border-radius: var(--radius);
+  background: var(--callout-bg);
+}
+
+.doc .callout-warning {
+  --callout-bg: var(--warning-bg);
+  --callout-border: var(--warning-border);
+}
+
+.doc .callout-danger {
+  --callout-bg: var(--danger-bg);
+  --callout-border: var(--danger-border);
+}
+
+.doc .callout-tip {
+  --callout-bg: var(--tip-bg);
+  --callout-border: var(--tip-border);
+}
+
+.doc .doc-toc {
+  margin: 0 0 1.8em;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  font-size: 0.95em;
+}
+
+.doc .doc-toc ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc .doc-toc li {
+  margin: 0.2em 0;
+}
+
+.doc .doc-toc a {
+  text-decoration: none;
+}
+
+.doc .doc-toc a:hover {
+  text-decoration: underline;
+}
+
+.doc .embed-frame {
+  display: block;
+  width: 100%;
+  height: calc(100vh - var(--topbar-h) - 88px);
+  min-height: 480px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton span {
+    animation: none;
+  }
+
+  .sidebar,
+  .nav-tree summary::after,
+  .nav-tree details::details-content {
+    transition: none;
+  }
+}
+
+@media print {
+  .topbar,
+  .sidebar,
+  .toc,
+  .backdrop,
+  .restore,
+  .copy-btn {
+    display: none !important;
+  }
+
+  .layout {
+    display: block;
+  }
+
+  .main {
+    padding: 0;
+  }
+
+  .root[data-theme] {
+    --bg: #fff;
+    --text: #000;
+    --text-strong: #000;
+    --image-filter: none;
+  }
+}
