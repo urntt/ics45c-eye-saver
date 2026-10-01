@@ -197,15 +197,45 @@
   outline-offset: 2px;
 }
 
-.menu-btn {
-  display: none;
-}
-
 .layout {
+  --nav-col: var(--sidebar-w);
+  --toc-col: var(--toc-w);
   display: grid;
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--toc-w);
+  grid-template-columns: var(--nav-col) minmax(0, 1fr) var(--toc-col);
   max-width: 1500px;
   margin: 0 auto;
+  transition: grid-template-columns 0.25s ease;
+}
+
+/* Collapsible side panels: the grid track shrinks to zero while the panel's
+   content keeps its width and is clipped, then the panel becomes hidden
+   (visibility flips only after the transition, so it stays visible while
+   sliding). */
+.app.nav-collapsed .layout {
+  --nav-col: 0px;
+}
+
+.app.toc-collapsed .layout {
+  --toc-col: 0px;
+}
+
+.sidebar,
+.toc {
+  overflow-x: hidden;
+  transition: visibility 0.25s;
+}
+
+.sidebar > * {
+  width: calc(var(--sidebar-w) - 28px);
+}
+
+.toc > * {
+  width: calc(var(--toc-w) - 24px);
+}
+
+.app.nav-collapsed .sidebar,
+.app.toc-collapsed .toc {
+  visibility: hidden;
 }
 
 .sidebar,
@@ -399,10 +429,11 @@
 
 @media (max-width: 1260px) {
   .layout {
-    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+    grid-template-columns: var(--nav-col) minmax(0, 1fr);
   }
 
-  .toc {
+  .toc,
+  .toc-btn {
     display: none;
   }
 }
@@ -412,8 +443,13 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .menu-btn {
-    display: inline-flex;
+  /* The course pages become a drawer; the collapsed preference does not apply. */
+  .app.nav-collapsed .sidebar {
+    visibility: visible;
+  }
+
+  .sidebar > * {
+    width: auto;
   }
 
   .sidebar {
@@ -796,7 +832,8 @@
 }
 
 @media (hover: none) {
-  .doc .copy-btn {
+  .doc .copy-btn,
+  .doc .ocr-btn {
     opacity: 1;
   }
 }
@@ -837,6 +874,112 @@
 
 .doc p.media {
   text-align: center;
+}
+
+/* Images with the OCR ("Copy text") button and its result panel. */
+.doc .image-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: top;
+}
+
+.doc .image-wrap > img {
+  display: block;
+}
+
+.doc .ocr-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font: 500 13px/1 var(--font-sans);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.doc .image-wrap:hover .ocr-btn,
+.doc .ocr-btn:focus-visible {
+  opacity: 1;
+}
+
+.doc .ocr-panel {
+  margin: 0 0 1.2em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  text-align: left;
+}
+
+.doc .ocr-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.doc .ocr-status {
+  flex: 1;
+}
+
+.doc .ocr-panel.busy .ocr-status::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.doc .ocr-head .tool {
+  height: 30px;
+}
+
+.doc .ocr-head .tool.copied {
+  color: var(--accent);
+}
+
+.doc .ocr-text {
+  max-height: 22em;
+  padding: 12px 14px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.95em;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.doc .ocr-text.code {
+  color: var(--text-strong);
+  font: 14px/1.6 var(--font-mono);
+  font-feature-settings: "liga" 0, "calt" 0;
+  font-variant-ligatures: none;
+  tab-size: 4;
+  white-space: pre;
 }
 
 .doc .align-center {
@@ -957,11 +1100,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .skeleton span {
+  .skeleton span,
+  .doc .ocr-panel.busy .ocr-status::before {
     animation: none;
   }
 
+  .layout,
   .sidebar,
+  .toc,
   .nav-tree summary::after,
   .nav-tree details::details-content {
     transition: none;
@@ -974,7 +1120,9 @@
   .toc,
   .backdrop,
   .restore,
-  .copy-btn {
+  .copy-btn,
+  .ocr-btn,
+  .ocr-panel {
     display: none !important;
   }
 

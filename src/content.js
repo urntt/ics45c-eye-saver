@@ -9,6 +9,11 @@
  * reader (course navigation, article, on-page contents) that scrolls with the
  * page itself. Pages that contain anything besides supported embeds (such as
  * the home page) are left untouched.
+ *
+ * Within the reader, code blocks are highlighted, images get a "Copy text"
+ * (OCR) button served by the service worker and src/offscreen.js, and both
+ * side panels can be collapsed; theme and panel choices persist in
+ * chrome.storage.
  */
 (() => {
   "use strict";
@@ -179,7 +184,14 @@
 
   const SVG_NS = "http://www.w3.org/2000/svg";
   const ICONS = {
-    menu: [["path", { d: "M4 6h16M4 12h16M4 18h16" }]],
+    sidebarLeft: [
+      ["rect", { x: 3, y: 4, width: 18, height: 16, rx: 2 }],
+      ["path", { d: "M9 4v16" }],
+    ],
+    sidebarRight: [
+      ["rect", { x: 3, y: 4, width: 18, height: 16, rx: 2 }],
+      ["path", { d: "M15 4v16" }],
+    ],
     sun: [
       ["circle", { cx: 12, cy: 12, r: 4 }],
       ["path", { d: "M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" }],
@@ -197,6 +209,8 @@
       ["path", { d: "M5 15V5a2 2 0 0 1 2-2h10" }],
     ],
     check: [["path", { d: "M5 12.5l4.5 4.5L19 7.5" }]],
+    scanText: [["path", { d: "M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M8 10h8M8 14h5" }]],
+    close: [["path", { d: "M6 6l12 12M18 6L6 18" }]],
   };
 
   function icon(name) {
@@ -237,14 +251,20 @@
   // Reader
 
   class Reader {
-    constructor({ embeds, nav, titles, themeMode }) {
+    constructor({ embeds, nav, titles, settings }) {
       this.embeds = embeds;
       this.nav = nav;
       this.titles = titles;
-      this.themeMode = themeMode;
+      this.themeMode = settings.theme;
+      this.settings = settings;
       this.headings = [];
       this.scrollFrame = 0;
+      /** OCR panel per image wrapper, and the recognized {text, code} per panel. */
+      this.ocrPanels = new WeakMap();
+      this.ocrResults = new WeakMap();
       this.colorScheme = matchMedia("(prefers-color-scheme: dark)");
+      /** Below this width the course pages become a drawer (see reader.css). */
+      this.narrow = matchMedia("(max-width: 900px)");
     }
 
     /** Builds the shadow DOM and resolves once its stylesheet has loaded. */
@@ -264,15 +284,17 @@
         this.tocList,
       );
       this.themeButton = h("button", { className: "tool icon-only", type: "button", "data-action": "theme" });
-      this.menuButton = h("button", {
-        className: "tool icon-only menu-btn", type: "button", "data-action": "menu",
-        "aria-label": "Course pages", "aria-expanded": "false",
-      }, icon("menu"));
+      this.navButton = h("button", {
+        className: "tool icon-only", type: "button", "data-action": "nav",
+      }, icon("sidebarLeft"));
+      this.tocButton = h("button", {
+        className: "tool icon-only toc-btn", type: "button", "data-action": "toc",
+      }, icon("sidebarRight"));
 
       const single = this.embeds.length === 1 ? this.embeds[0] : null;
       this.app = h("div", { className: "app" },
         h("header", { className: "topbar" },
-          this.menuButton,
+          this.navButton,
           h("a", { className: "brand", href: `${location.origin}${SITE_ROOT}` }, this.titles.siteTitle),
           h("span", { className: "crumb-sep", "aria-hidden": "true", text: "/" }),
           h("span", { className: "crumb", text: this.titles.pageTitle }),
@@ -286,6 +308,7 @@
             title: "Show the original Google Sites page",
           }, icon("page"), h("span", { className: "label", text: "Original" })),
           this.themeButton,
+          this.tocButton,
         ),
         h("div", { className: "layout" },
           h("nav", { className: "sidebar", "aria-label": "Course pages" },
@@ -295,8 +318,12 @@
           h("main", { className: "main" }, this.article),
           this.toc,
         ),
-        h("div", { className: "backdrop", "data-action": "menu" }),
+        h("div", { className: "backdrop", "data-action": "nav" }),
       );
+      // Restored before the first paint, so no collapse animation plays on load.
+      this.app.classList.toggle("nav-collapsed", this.settings.navCollapsed);
+      this.app.classList.toggle("toc-collapsed", this.settings.tocCollapsed);
+      this.updatePanelButtons();
       this.restoreButton = h("button", {
         className: "restore", type: "button", "data-action": "reader",
       }, icon("book"), h("span", { text: "Reader view" }));
@@ -336,6 +363,7 @@
       window.addEventListener("resize", () => this.scheduleScrollSpy(), { passive: true });
       window.addEventListener("popstate", (event) => this.onPopState(event));
       this.colorScheme.addEventListener("change", () => this.applyTheme());
+      this.narrow.addEventListener("change", () => this.toggleDrawer(false));
     }
 
     onClick(event) {
@@ -343,16 +371,20 @@
       if (actionTarget) {
         const action = actionTarget.getAttribute("data-action");
         if (action === "theme") this.cycleTheme();
-        else if (action === "menu") this.toggleMenu();
+        else if (action === "nav") this.toggleNav();
+        else if (action === "toc") this.setPanelCollapsed("toc", !this.app.classList.contains("toc-collapsed"));
         else if (action === "original") this.deactivate();
         else if (action === "reader") this.activate();
         else if (action === "retry") this.load();
-        else if (action === "copy") this.copyCode(actionTarget);
+        else if (action === "copy") this.copyWithFeedback(actionTarget, actionTarget.parentElement.querySelector("pre").textContent);
+        else if (action === "ocr") this.recognizeImage(actionTarget.closest(".image-wrap"));
+        else if (action === "ocr-copy") this.copyWithFeedback(actionTarget, this.ocrResults.get(actionTarget.closest(".ocr-panel")).text);
+        else if (action === "ocr-close") actionTarget.closest(".ocr-panel").hidden = true;
         return;
       }
       const link = event.target.closest('a[href^="#"]');
       if (link) this.followAnchor(event, link);
-      else if (event.target.closest(".sidebar a")) this.toggleMenu(false);
+      else if (event.target.closest(".sidebar a")) this.toggleDrawer(false);
     }
 
     followAnchor(event, link) {
@@ -390,15 +422,46 @@
     }
 
     deactivate() {
-      this.toggleMenu(false);
+      this.toggleDrawer(false);
       this.host.removeAttribute("data-active");
       setPageState(null);
       window.scrollTo({ top: 0 });
     }
 
-    toggleMenu(open = !this.app.classList.contains("nav-open")) {
+    // Side panels -------------------------------------------------------------
+
+    /** Opens the drawer on narrow screens; collapses the sidebar otherwise. */
+    toggleNav() {
+      if (this.narrow.matches) this.toggleDrawer();
+      else this.setPanelCollapsed("nav", !this.app.classList.contains("nav-collapsed"));
+    }
+
+    toggleDrawer(open = !this.app.classList.contains("nav-open")) {
       this.app.classList.toggle("nav-open", open);
-      this.menuButton.setAttribute("aria-expanded", String(open));
+      this.updatePanelButtons();
+    }
+
+    /** Collapses or expands a side panel ("nav" or "toc") and remembers the choice. */
+    setPanelCollapsed(panel, collapsed) {
+      this.app.classList.toggle(`${panel}-collapsed`, collapsed);
+      chrome.storage.local.set({ [`${panel}Collapsed`]: collapsed });
+      this.updatePanelButtons();
+    }
+
+    updatePanelButtons() {
+      const navShown = this.narrow.matches
+        ? this.app.classList.contains("nav-open")
+        : !this.app.classList.contains("nav-collapsed");
+      const tocShown = !this.app.classList.contains("toc-collapsed");
+      for (const [button, shown, name] of [
+        [this.navButton, navShown, "course pages"],
+        [this.tocButton, tocShown, "page outline"],
+      ]) {
+        const label = `${shown ? "Hide" : "Show"} ${name}`;
+        button.title = label;
+        button.setAttribute("aria-label", label);
+        button.setAttribute("aria-expanded", String(shown));
+      }
     }
 
     // Theme -------------------------------------------------------------------
@@ -429,6 +492,7 @@
         const parts = await Promise.all(this.embeds.map((embed) => renderEmbed(embed, this.titles.pageTitle)));
         this.article.replaceChildren(...parts);
         this.decorateCodeBlocks();
+        this.decorateImages();
         this.buildToc();
         if (location.hash) this.scrollToHash();
       } catch (error) {
@@ -470,20 +534,103 @@
       }
     }
 
-    async copyCode(button) {
-      const code = button.parentElement.querySelector("pre").textContent;
+    /** Copies text and briefly swaps the button's icon for a check mark. */
+    async copyWithFeedback(button, text) {
       try {
-        await navigator.clipboard.writeText(code);
-        button.replaceChildren(icon("check"));
-        button.classList.add("copied");
+        await navigator.clipboard.writeText(text);
       } catch (error) {
         console.error("[ICS 45C Eye Saver] copy failed", error);
-        return;
+        return false;
       }
+      const original = button.querySelector("svg");
+      original.replaceWith(icon("check"));
+      button.classList.add("copied");
       setTimeout(() => {
-        button.replaceChildren(icon("copy"));
+        button.querySelector("svg").replaceWith(original);
         button.classList.remove("copied");
       }, 1500);
+      return true;
+    }
+
+    // Text in images (OCR) ----------------------------------------------------
+
+    decorateImages() {
+      for (const img of this.article.querySelectorAll("img")) {
+        const wrap = h("span", { className: "image-wrap" });
+        // The wrapper takes the image's width so the button sits on the image's corner.
+        if (img.style.width) {
+          wrap.style.width = img.style.width;
+          img.style.width = "100%";
+        }
+        img.replaceWith(wrap);
+        wrap.append(img, h("button", {
+          className: "ocr-btn", type: "button", "data-action": "ocr",
+          title: "Recognize and copy the text in this image",
+        }, icon("scanText"), h("span", { text: "Copy text" })));
+      }
+    }
+
+    /** Runs OCR on an image, shows the text under it and copies it. */
+    async recognizeImage(wrap) {
+      let panel = this.ocrPanels.get(wrap);
+      if (!panel) {
+        panel = this.renderOcrPanel();
+        this.ocrPanels.set(wrap, panel);
+        (wrap.closest("p") ?? wrap).after(panel);
+      }
+      panel.hidden = false;
+      const status = panel.querySelector(".ocr-status");
+      const output = panel.querySelector(".ocr-text");
+      const copyButton = panel.querySelector('[data-action="ocr-copy"]');
+      if (panel.classList.contains("busy")) return;
+
+      let result = this.ocrResults.get(panel);
+      if (result === undefined) {
+        panel.classList.add("busy");
+        status.textContent = "Recognizing text… (the first run loads the OCR engine)";
+        try {
+          const response = await chrome.runtime.sendMessage({ type: "ocr-image", src: wrap.querySelector("img").src });
+          if (!response?.ok) throw new Error(response?.error ?? "The extension did not answer");
+          result = { text: response.text, code: response.code };
+          this.ocrResults.set(panel, result);
+        } catch (error) {
+          console.error("[ICS 45C Eye Saver] OCR failed", error);
+          status.textContent = `Could not recognize text: ${error?.message ?? error}`;
+          return;
+        } finally {
+          panel.classList.remove("busy");
+        }
+      }
+
+      const { text, code } = result;
+      output.textContent = text;
+      // Code screenshots come back with their indentation: show them on a monospace grid.
+      output.classList.toggle("code", code);
+      output.hidden = !text;
+      copyButton.hidden = !text;
+      if (!text) {
+        status.textContent = "No text found in this image.";
+        return;
+      }
+      const copied = await this.copyWithFeedback(copyButton, text);
+      status.textContent = copied
+        ? "Text copied. Machine-recognized, so double-check it."
+        : "Select the text below to copy it. Machine-recognized, so double-check it.";
+    }
+
+    renderOcrPanel() {
+      return h("div", { className: "ocr-panel", role: "region", "aria-label": "Text in image", "aria-live": "polite" },
+        h("div", { className: "ocr-head" },
+          h("span", { className: "ocr-status" }),
+          h("button", { className: "tool", type: "button", "data-action": "ocr-copy", hidden: true },
+            icon("copy"), h("span", { text: "Copy" })),
+          h("button", {
+            className: "tool icon-only", type: "button", "data-action": "ocr-close",
+            title: "Close", "aria-label": "Close",
+          }, icon("close")),
+        ),
+        h("div", { className: "ocr-text", hidden: true }),
+      );
     }
 
     // On-page contents ----------------------------------------------------------
@@ -543,12 +690,16 @@
     const embeds = findEmbeds();
     if (!embeds) return;
     const nav = readSiteNav();
-    const { theme } = await chrome.storage.local.get({ theme: "auto" });
+    const stored = await chrome.storage.local.get({ theme: "auto", navCollapsed: false, tocCollapsed: false });
     const reader = new Reader({
       embeds,
       nav,
       titles: readTitles(nav),
-      themeMode: THEME_MODES.includes(theme) ? theme : "auto",
+      settings: {
+        theme: THEME_MODES.includes(stored.theme) ? stored.theme : "auto",
+        navCollapsed: stored.navCollapsed === true,
+        tocCollapsed: stored.tocCollapsed === true,
+      },
     });
     await reader.mount();
     reader.activate();

@@ -7,12 +7,14 @@
   "scripts": {
     "test": "node --test",
     "smoke": "node scripts/smoke.mjs",
-    "build:highlight": "node scripts/build-highlight.mjs"
+    "vendor": "node scripts/vendor.mjs"
   },
   "devDependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
     "esbuild": "^0.28.2",
     "highlight.js": "^11.12.0",
     "jsdom": "^27.0.0",
-    "puppeteer-core": "^25.12.0"
+    "puppeteer-core": "^25.12.0",
+    "tesseract.js": "^7.0.0"
   }
 }

@@ -22,7 +22,7 @@ const DEFAULT_CHROME = {
   linux: "/usr/bin/google-chrome",
 };
 
-const DOC_PAGES = ["homework-0", "syllabus", "course-info/assigned-reading"];
+const DOC_PAGES = ["homework-0", "homework-1", "syllabus", "course-info/assigned-reading"];
 const PLAIN_PAGES = ["home"];
 const VIEWPORTS = {
   desktop: { width: 1440, height: 900 },
@@ -73,7 +73,11 @@ async function checkInteractions(browser, page) {
   const url = `${SITE}/homework-0`;
   await browser.defaultBrowserContext().overridePermissions("https://sites.google.com", ["clipboard-read", "clipboard-write", "clipboard-sanitized-write"]);
   await page.setViewport(VIEWPORTS.desktop);
-  await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }]);
+  // Pin motion: the animation checks must not depend on the OS "animation effects" setting.
+  await page.emulateMediaFeatures([
+    { name: "prefers-color-scheme", value: "light" },
+    { name: "prefers-reduced-motion", value: "no-preference" },
+  ]);
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await waitForReader(page);
   await page.evaluate(() => (window.__smokeMarker = true));
@@ -151,18 +155,89 @@ async function checkInteractions(browser, page) {
     `sidebar group animates open (${Math.round(closedHeight)} → ${Math.round(midHeight)} → ${Math.round(openHeight)}px)`,
   );
 
+  // Side panels collapse (and stay collapsed after a reload), then expand again.
+  const panelWidths = () =>
+    page.evaluate(() => {
+      const shadow = document.getElementById("ics45c-reader").shadowRoot;
+      const visibleWidth = (selector) => {
+        const element = shadow.querySelector(selector);
+        return getComputedStyle(element).visibility === "hidden" ? 0 : Math.round(element.getBoundingClientRect().width);
+      };
+      return { nav: visibleWidth(".sidebar"), toc: visibleWidth(".toc") };
+    });
+  const expanded = await panelWidths();
+  await page.locator(reader('[data-action="nav"]')).click();
+  await page.locator(reader('[data-action="toc"]')).click();
+  await sleep(500);
+  const collapsed = await panelWidths();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForReader(page);
+  const afterReload = await panelWidths();
+  await page.locator(reader('[data-action="nav"]')).click();
+  await page.locator(reader('[data-action="toc"]')).click();
+  await sleep(500);
+  const restored = await panelWidths();
+  check(
+    expanded.nav > 200 && expanded.toc > 200 &&
+      collapsed.nav === 0 && collapsed.toc === 0 &&
+      afterReload.nav === 0 && afterReload.toc === 0 &&
+      restored.nav === expanded.nav && restored.toc === expanded.toc,
+    `side panels collapse, persist and expand (nav ${expanded.nav} → ${collapsed.nav} → ${restored.nav}px)`,
+  );
+
   // Mobile navigation drawer.
   await page.setViewport(VIEWPORTS.mobile);
   await page.reload({ waitUntil: "domcontentloaded" });
   await waitForReader(page);
   const sidebarLeft = () => page.$eval(reader(".sidebar"), (nav) => Math.round(nav.getBoundingClientRect().left));
   const closedLeft = await sidebarLeft();
-  await page.locator(reader(".menu-btn")).click();
+  await page.locator(reader('[data-action="nav"]')).click();
   await settle(page);
   const openLeft = await sidebarLeft();
   await page.mouse.click(VIEWPORTS.mobile.width - 20, 400); // Backdrop.
   await settle(page);
   check(closedLeft < 0 && openLeft === 0 && (await sidebarLeft()) < 0, "mobile drawer opens and closes");
+}
+
+/** Clicks "Copy text" on the first image of a course page and returns the OCR panel's result. */
+async function ocrFirstImage(page, slug) {
+  await page.setViewport(VIEWPORTS.desktop);
+  await page.goto(`${SITE}/${slug}`, { waitUntil: "domcontentloaded" });
+  await waitForReader(page);
+  await page.$eval(reader(".image-wrap"), (wrap) => wrap.scrollIntoView({ block: "center" }));
+  await page.waitForFunction(() => {
+    const img = document.getElementById("ics45c-reader").shadowRoot.querySelector(".image-wrap img");
+    return img.complete && img.naturalWidth > 0;
+  });
+  await page.hover(reader(".image-wrap"));
+  await page.locator(reader(".ocr-btn")).click();
+  await page.waitForFunction(
+    () => {
+      const panel = document.getElementById("ics45c-reader").shadowRoot.querySelector(".ocr-panel");
+      return panel && !panel.classList.contains("busy") && panel.querySelector(".ocr-status").textContent;
+    },
+    { timeout: 90000 },
+  );
+  const result = await page.$eval(reader(".ocr-text"), (output) => ({
+    text: output.textContent,
+    code: output.classList.contains("code"),
+  }));
+  const clipboard = await page.evaluate(() => navigator.clipboard.readText()).catch(() => "");
+  return { ...result, copied: clipboard.replace(/\r\n/g, "\n") === result.text };
+}
+
+/** OCR: a chart keeps Tesseract's text; a code screenshot keeps its layout. */
+async function checkOcr(page) {
+  const chart = await ocrFirstImage(page, "syllabus");
+  check(
+    /Grade Weighting/.test(chart.text) && /Midterm Exam/.test(chart.text) && !chart.code && chart.copied,
+    `OCR recognizes and copies the text in a chart (${chart.text.split("\n").length} lines)`,
+  );
+  const code = await ocrFirstImage(page, "homework-1");
+  check(
+    code.code && code.copied && /^int main\(\) \{$/m.test(code.text) && /^ {4}\S/m.test(code.text) && !/^\d+ /m.test(code.text),
+    "OCR on a code screenshot drops line numbers and keeps indentation",
+  );
 }
 
 const browser = await puppeteer.launch({
@@ -211,6 +286,7 @@ try {
   }
 
   await checkInteractions(browser, page);
+  await checkOcr(page);
 } finally {
   await browser.close();
 }
