@@ -1,6 +1,6 @@
 {
   "name": "ics45c-eye-saver",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A Chromium browser extension that turns the Google Docs embedded in the ICS 45C course site into a clean, natively scrolling reader view.",
   "author": "urntt <urntts@gmail.com> (https://urntt.com)",
   "license": "MIT",
