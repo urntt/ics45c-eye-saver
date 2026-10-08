@@ -224,7 +224,7 @@ test("never copies scripts, handlers or unsafe URLs into the output", () => {
   assert.ok(!/script|onclick|onerror|alert|example\.com/.test(html), html);
   const images = out.querySelectorAll("img");
   assert.equal(images.length, 1, "only https images survive");
-  assert.equal(images[0].getAttribute("loading"), "lazy");
+  assert.equal(images[0].hasAttribute("loading"), false, "images load eagerly so print and export are complete");
   assert.match(images[0].getAttribute("style"), /aspect-ratio: 481 \/ 200/, "space is reserved before loading");
   assert.equal(out.querySelectorAll("hr").length, 1, "hidden page-break rules are skipped");
 });

@@ -315,7 +315,6 @@ body { margin: 0; }
     for (const img of content.querySelectorAll("img")) {
       const embedded = options.images.get(img.getAttribute("src"));
       if (embedded) img.setAttribute("src", embedded);
-      img.removeAttribute("loading");
     }
 
     page.documentElement.setAttribute("lang", "en");

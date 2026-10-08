@@ -116,7 +116,7 @@ test("rewrites in-document links to heading anchors", () => {
 test("builds a standalone HTML file with embedded images and no reader controls", () => {
   const { document, element } = article(
     `<h1 id="h.a">Title</h1>` +
-      `<p class="media"><span class="image-wrap"><img src="https://docs.google.com/docs-images-rt/abc" alt="chart" loading="lazy">` +
+      `<p class="media"><span class="image-wrap"><img src="https://docs.google.com/docs-images-rt/abc" alt="chart">` +
       `<button class="ocr-btn">Copy text</button></span></p>` +
       `<p><span class="image-wrap"><img src="https://docs.google.com/docs-images-rt/missing" alt=""></span></p>` +
       `<div class="code-block"><pre><code class="language-cpp"><span class="hljs-keyword">int</span> x;</code></pre>` +
@@ -137,7 +137,6 @@ test("builds a standalone HTML file with embedded images and no reader controls"
   assert.equal(page.querySelector(".root > .app > .main > article.doc h1").id, "h.a");
   const sources = [...page.querySelectorAll("img")].map((img) => img.getAttribute("src"));
   assert.deepEqual(sources, ["data:image/png;base64,AAAA", "https://docs.google.com/docs-images-rt/missing"]);
-  assert.equal(page.querySelector("img").hasAttribute("loading"), false);
   assert.equal(page.querySelector(".hljs-keyword").textContent, "int", "syntax highlighting is kept");
   assert.equal(page.querySelector(".export-note a").href, META.url);
   assert.equal(element.querySelectorAll("button").length, 2, "the reader's own article is not modified");

@@ -24,6 +24,8 @@
   const PUBLISHED_DOC = /^https:\/\/docs\.google\.com\/document\/d\/e\/([\w-]+)\/pub(?:[?#]|$)/;
   const FRAME_HOSTS = new Set(["docs.google.com", "drive.google.com"]);
   const THEME_MODES = ["auto", "light", "dark"];
+  /** Longest wait for images before printing; after that the user is told to retry. */
+  const IMAGE_WAIT_MS = 15000;
   const THEME_LABELS = { auto: "Theme: follow system", light: "Theme: light", dark: "Theme: dark" };
 
   const root = document.documentElement;
@@ -603,6 +605,13 @@
       const fileName = (extension) => Ics45cExporter.fileName(location.pathname, extension);
       try {
         if (format === "pdf") {
+          // The print preview shows the page as it is, so wait for images still on their way.
+          this.exportStatus.textContent = "Loading images…";
+          const waiting = await this.imagesStillLoading();
+          if (waiting > 0) {
+            this.exportStatus.textContent = `${waiting} image${waiting === 1 ? " is" : "s are"} still loading. Try again in a moment.`;
+            return;
+          }
           this.toggleExportMenu(false);
           window.print();
           return;
@@ -623,6 +632,20 @@
         console.error("[ICS 45C Eye Saver] export failed", error);
         this.exportStatus.textContent = `Could not export: ${error?.message ?? error}`;
       }
+    }
+
+    /**
+     * Waits (up to IMAGE_WAIT_MS) for the article's images to load or fail and
+     * returns how many are still on their way.
+     */
+    async imagesStillLoading() {
+      const loading = () => [...this.article.querySelectorAll("img")].filter((img) => !img.complete);
+      const settled = loading().map((img) => new Promise((resolve) => {
+        img.addEventListener("load", resolve, { once: true });
+        img.addEventListener("error", resolve, { once: true });
+      }));
+      await Promise.race([Promise.all(settled), new Promise((resolve) => setTimeout(resolve, IMAGE_WAIT_MS))]);
+      return loading().length;
     }
 
     /** A single HTML file: the reader's stylesheet inline and images as data URLs. */

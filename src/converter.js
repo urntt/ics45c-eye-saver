@@ -273,15 +273,16 @@ const Ics45cConverter = (() => {
     const out = ctx.doc.createElement("img");
     out.src = src;
     out.alt = img.getAttribute("alt") ?? "";
-    out.setAttribute("loading", "lazy");
     const title = img.getAttribute("title");
     if (title) out.title = title;
     const style = resolveStyle(img, ctx);
     const width = parseFloat(style.get("width") ?? "");
     const height = parseFloat(style.get("height") ?? "");
     if (width > 0) out.style.width = `min(100%, ${Math.round(width)}px)`;
-    // Reserves the image's space before it loads (images are lazy), so the
-    // layout does not shift under the reader or under section jumps.
+    // Reserves the image's space before it loads, so the layout does not shift
+    // under the reader or under section jumps. Images are deliberately not
+    // lazy-loaded: printing and exporting need every image, not only the ones
+    // that have been scrolled into view.
     if (width > 0 && height > 0) out.style.aspectRatio = `${Math.round(width)} / ${Math.round(height)}`;
     return out;
   }

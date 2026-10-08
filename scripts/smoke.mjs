@@ -264,6 +264,19 @@ async function checkExport(browser, page) {
   const imageCount = await page.$$eval(reader("article img"), (images) => images.length);
   const openMenu = () => page.locator(reader('[data-action="export-menu"]')).click();
 
+  // Printing shows the page as it is, so images must load without being scrolled into view.
+  const allLoaded = await page
+    .waitForFunction(
+      () => {
+        const images = [...document.getElementById("ics45c-reader").shadowRoot.querySelectorAll("article img")];
+        return images.every((img) => img.complete && img.naturalWidth > 0);
+      },
+      { timeout: 20000 },
+    )
+    .then(() => true, () => false);
+  const scrolled = await page.evaluate(() => scrollY);
+  check(allLoaded && imageCount > 0 && scrolled === 0, `export: all ${imageCount} images load without scrolling`);
+
   await openMenu();
   await page.locator(reader('[data-format="copy"]')).click();
   await page.waitForFunction(() => document.getElementById("ics45c-reader").shadowRoot.querySelector(".menu-status").textContent);
