@@ -187,6 +187,67 @@
   padding: 0;
 }
 
+.tool:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Export menu, anchored under its button in the top bar. */
+.export {
+  position: relative;
+  flex: none;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: 270px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+.menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-strong);
+  font: 500 13.5px/1.4 var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--hover);
+}
+
+.menu-item small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.menu-status {
+  padding: 8px 10px 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  color: var(--text-muted);
+  font: 12px/1.4 var(--font-sans);
+}
+
+.menu-status:empty {
+  display: none;
+}
+
 .tool svg,
 .restore svg {
   flex: none;
@@ -498,11 +559,11 @@
     text-overflow: ellipsis;
   }
 
-  .tool .label {
+  .topbar .tool .label {
     display: none;
   }
 
-  .tool {
+  .topbar .tool {
     width: 34px;
     padding: 0;
   }
@@ -1132,6 +1193,54 @@
 
   .main {
     padding: 0;
+  }
+
+  .app {
+    min-height: 0;
+  }
+
+  .doc {
+    max-width: none;
+  }
+
+  /* Nothing scrolls on paper: wrap long code lines and let wide tables shrink. */
+  .doc pre {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
+  .doc .code-block pre {
+    padding-right: 18px;
+  }
+
+  .doc .table-wrap {
+    overflow: visible;
+  }
+
+  .doc pre,
+  .doc tr,
+  .doc img,
+  .doc .callout {
+    break-inside: avoid;
+  }
+
+  .doc h1,
+  .doc h2,
+  .doc h3,
+  .doc h4 {
+    break-after: avoid;
+  }
+
+  /* Keep the shading that carries meaning even when "Background graphics" is off. */
+  .doc pre,
+  .doc code,
+  .doc mark,
+  .doc th,
+  .doc .callout,
+  .doc .doc-toc {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   .root[data-theme] {

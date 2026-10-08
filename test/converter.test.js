@@ -154,10 +154,16 @@ test("detects table header rows and keeps single commands inline", () => {
       `<table><tr>${cell(p(span("Week")), "head-cell")}${cell(p(span("Topic")), "head-cell")}</tr>` +
       `<tr>${cell(p(span("1")))}${cell(p(span("Intro")))}</tr></table>` +
       `<table><tr>${cell(p(span("1.4")))}${cell(p(span("Activities")))}</tr>` +
-      `<tr>${cell(p(span("1.7")))}${cell(p(span("Glossary")))}</tr></table>`,
+      `<tr>${cell(p(span("1.7")))}${cell(p(span("Glossary")))}</tr></table>` +
+      `<table><tr>${cell(p(span("File", "bold")))}${cell(p(span("Contains", "bold")))}</tr>` +
+      `<tr>${cell(p(span("src/a.hpp", "mono bold")))}${cell(p(span("main()", "mono bold")))}</tr></table>` +
+      `<table><tr>${cell(p(span("ls", "mono bold")))}${cell(p(span("pwd", "mono bold")))}</tr>` +
+      `<tr>${cell(p(span("cd", "mono bold")))}${cell(p(span("rm", "mono bold")))}</tr></table>`,
   );
   const tables = out.querySelectorAll(".table-wrap > table");
-  assert.equal(tables.length, 3);
+  assert.equal(tables.length, 5);
+  assert.equal(tables[3].querySelector("thead th").textContent, "File", "a body of bold code does not hide the header");
+  assert.equal(tables[4].querySelector("thead"), null, "a table of bold code alone has no header");
   assert.equal(tables[0].querySelector("thead th").textContent, "Command");
   assert.equal(tables[0].querySelector("tbody td code").textContent, "pwd");
   assert.equal(tables[0].querySelector("pre"), null);

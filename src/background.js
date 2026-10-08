@@ -6,6 +6,8 @@
  *   extension's host permission lets this worker do it.
  * - Recognizes text in document images (OCR) through the offscreen document
  *   (src/offscreen.html), which can run Tesseract's Web Worker.
+ * - Reads document images as data URLs, so an exported HTML file can embed
+ *   them.
  *
  * Requests are built here from validated inputs (a published-document id, an
  * image URL on Google Docs' image host), so the worker never acts as a
@@ -14,6 +16,8 @@
 
 const PUBLISHED_DOC_ID = /^[\w-]{20,200}$/;
 const OFFSCREEN_URL = "src/offscreen.html";
+/** Larger images are left as links in exports rather than embedded. */
+const MAX_EMBEDDED_IMAGE_BYTES = 8 * 1024 * 1024;
 
 async function fetchPublishedDoc(docId) {
   if (typeof docId !== "string" || !PUBLISHED_DOC_ID.test(docId)) {
@@ -28,7 +32,7 @@ async function fetchPublishedDoc(docId) {
 }
 
 /** Images in published Docs are served from docs.google.com/docs-images-rt/. */
-function ocrImageUrl(src) {
+function docImageUrl(src) {
   let url;
   try {
     url = new URL(src);
@@ -36,7 +40,7 @@ function ocrImageUrl(src) {
     url = null;
   }
   if (url?.protocol !== "https:" || url.hostname !== "docs.google.com" || !url.pathname.startsWith("/docs-images-rt/")) {
-    throw new Error("Text recognition only works on images from Google Docs.");
+    throw new Error("Only images from Google Docs are supported.");
   }
   return url.href;
 }
@@ -59,16 +63,31 @@ async function ensureOffscreenDocument() {
 }
 
 async function recognizeImage(src) {
-  const url = ocrImageUrl(src);
+  const url = docImageUrl(src);
   await ensureOffscreenDocument();
   const response = await chrome.runtime.sendMessage({ target: "offscreen", type: "ocr", url });
   if (!response?.ok) throw new Error(response?.error ?? "The text recognizer did not answer");
   return { text: response.text, code: response.code };
 }
 
+async function fetchImageAsDataUrl(src) {
+  const response = await fetch(docImageUrl(src), { credentials: "omit" });
+  if (!response.ok) throw new Error(`The image request failed with HTTP ${response.status}`);
+  const type = response.headers.get("content-type")?.split(";")[0] ?? "";
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!type.startsWith("image/")) throw new Error("The response is not an image");
+  if (bytes.length > MAX_EMBEDDED_IMAGE_BYTES) throw new Error("The image is too large to embed");
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return `data:${type};base64,${btoa(binary)}`;
+}
+
 const HANDLERS = {
   "fetch-published-doc": (message) => fetchPublishedDoc(message.docId).then((html) => ({ html })),
   "ocr-image": (message) => recognizeImage(message.src),
+  "fetch-image": (message) => fetchImageAsDataUrl(message.src).then((dataUrl) => ({ dataUrl })),
 };
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

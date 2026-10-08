@@ -11,9 +11,10 @@
  * the home page) are left untouched.
  *
  * Within the reader, code blocks are highlighted, images get a "Copy text"
- * (OCR) button served by the service worker and src/offscreen.js, and both
- * side panels can be collapsed; theme and panel choices persist in
- * chrome.storage.
+ * (OCR) button served by the service worker and src/offscreen.js, both side
+ * panels can be collapsed, and the page can be exported (Ics45cExporter for
+ * Markdown and HTML, the browser's print dialog for PDF). Theme and panel
+ * choices persist in chrome.storage.
  */
 (() => {
   "use strict";
@@ -211,6 +212,7 @@
     check: [["path", { d: "M5 12.5l4.5 4.5L19 7.5" }]],
     scanText: [["path", { d: "M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M8 10h8M8 14h5" }]],
     close: [["path", { d: "M6 6l12 12M18 6L6 18" }]],
+    download: [["path", { d: "M12 4v11M7 11l5 5 5-5M5 20h14" }]],
   };
 
   function icon(name) {
@@ -291,6 +293,22 @@
         className: "tool icon-only toc-btn", type: "button", "data-action": "toc",
       }, icon("sidebarRight"));
 
+      this.exportButton = h("button", {
+        className: "tool", type: "button", "data-action": "export-menu", title: "Export this page",
+        "aria-haspopup": "menu", "aria-expanded": "false", disabled: true,
+      }, icon("download"), h("span", { className: "label", text: "Export" }));
+      this.exportStatus = h("div", { className: "menu-status", role: "status" });
+      const exportItem = (format, title, detail) =>
+        h("button", { className: "menu-item", type: "button", role: "menuitem", "data-action": "export", "data-format": format },
+          title, h("small", { text: detail }));
+      this.exportMenu = h("div", { className: "menu", role: "menu", "aria-label": "Export this page", hidden: true },
+        exportItem("markdown", "Markdown file", "For notes apps and editors (.md)"),
+        exportItem("copy", "Copy as Markdown", "The whole page, to the clipboard"),
+        exportItem("html", "HTML file", "One file with images, works offline"),
+        exportItem("pdf", "PDF", "Print dialog: choose Save as PDF"),
+        this.exportStatus,
+      );
+
       const single = this.embeds.length === 1 ? this.embeds[0] : null;
       this.app = h("div", { className: "app" },
         h("header", { className: "topbar" },
@@ -307,6 +325,7 @@
             className: "tool", type: "button", "data-action": "original",
             title: "Show the original Google Sites page",
           }, icon("page"), h("span", { className: "label", text: "Original" })),
+          h("div", { className: "export" }, this.exportButton, this.exportMenu),
           this.themeButton,
           this.tocButton,
         ),
@@ -364,13 +383,22 @@
       window.addEventListener("popstate", (event) => this.onPopState(event));
       this.colorScheme.addEventListener("change", () => this.applyTheme());
       this.narrow.addEventListener("change", () => this.toggleDrawer(false));
+      this.shadow.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") this.toggleExportMenu(false);
+      });
+      // Paper is white: print (and "Save as PDF") in the light theme whatever is on screen.
+      window.addEventListener("beforeprint", () => this.applyTheme("light"));
+      window.addEventListener("afterprint", () => this.applyTheme());
     }
 
     onClick(event) {
+      if (!event.target.closest(".export")) this.toggleExportMenu(false);
       const actionTarget = event.target.closest("[data-action]");
       if (actionTarget) {
         const action = actionTarget.getAttribute("data-action");
         if (action === "theme") this.cycleTheme();
+        else if (action === "export-menu") this.toggleExportMenu();
+        else if (action === "export") this.exportAs(actionTarget.dataset.format);
         else if (action === "nav") this.toggleNav();
         else if (action === "toc") this.setPanelCollapsed("toc", !this.app.classList.contains("toc-collapsed"));
         else if (action === "original") this.deactivate();
@@ -472,8 +500,10 @@
       this.applyTheme();
     }
 
-    applyTheme() {
-      const resolved = this.themeMode === "auto" ? (this.colorScheme.matches ? "dark" : "light") : this.themeMode;
+    /** Applies the chosen theme, or `forced` for the moment (printing). */
+    applyTheme(forced) {
+      const chosen = this.themeMode === "auto" ? (this.colorScheme.matches ? "dark" : "light") : this.themeMode;
+      const resolved = forced ?? chosen;
       this.frame.dataset.theme = resolved;
       this.themeButton.replaceChildren(icon({ auto: "auto", light: "sun", dark: "moon" }[this.themeMode]));
       this.themeButton.title = THEME_LABELS[this.themeMode];
@@ -488,12 +518,14 @@
     async load() {
       this.article.replaceChildren(this.renderSkeleton());
       this.toc.hidden = true;
+      this.exportButton.disabled = true;
       try {
         const parts = await Promise.all(this.embeds.map((embed) => renderEmbed(embed, this.titles.pageTitle)));
         this.article.replaceChildren(...parts);
         this.decorateCodeBlocks();
         this.decorateImages();
         this.buildToc();
+        this.exportButton.disabled = false;
         if (location.hash) this.scrollToHash();
       } catch (error) {
         console.error("[ICS 45C Eye Saver]", error);
@@ -550,6 +582,72 @@
         button.classList.remove("copied");
       }, 1500);
       return true;
+    }
+
+    // Export ------------------------------------------------------------------
+
+    toggleExportMenu(open = this.exportMenu.hidden) {
+      this.exportMenu.hidden = !open;
+      this.exportButton.setAttribute("aria-expanded", String(open));
+      if (open) this.exportStatus.textContent = "";
+    }
+
+    /** Exports the page as "markdown", "copy" (Markdown to the clipboard), "html" or "pdf". */
+    async exportAs(format) {
+      const meta = {
+        title: this.titles.pageTitle,
+        siteTitle: this.titles.siteTitle,
+        url: `${location.origin}${location.pathname}`,
+        date: new Date().toLocaleDateString("en-CA"), // YYYY-MM-DD in local time.
+      };
+      const fileName = (extension) => Ics45cExporter.fileName(location.pathname, extension);
+      try {
+        if (format === "pdf") {
+          this.toggleExportMenu(false);
+          window.print();
+          return;
+        }
+        if (format === "copy") {
+          await navigator.clipboard.writeText(Ics45cExporter.toMarkdown(this.article, meta));
+          this.exportStatus.textContent = "Copied to the clipboard.";
+          return;
+        }
+        if (format === "markdown") {
+          this.download(fileName("md"), Ics45cExporter.toMarkdown(this.article, meta), "text/markdown");
+        } else {
+          this.exportStatus.textContent = "Collecting images…";
+          this.download(fileName("html"), await this.buildHtml(meta), "text/html");
+        }
+        this.toggleExportMenu(false);
+      } catch (error) {
+        console.error("[ICS 45C Eye Saver] export failed", error);
+        this.exportStatus.textContent = `Could not export: ${error?.message ?? error}`;
+      }
+    }
+
+    /** A single HTML file: the reader's stylesheet inline and images as data URLs. */
+    async buildHtml(meta) {
+      const sources = [...new Set([...this.article.querySelectorAll("img")].map((img) => img.getAttribute("src")))];
+      const embed = (src) =>
+        chrome.runtime.sendMessage({ type: "fetch-image", src }).then(
+          (response) => (response?.ok ? response.dataUrl : null),
+          () => null, // An image that cannot be embedded keeps its remote URL.
+        );
+      const [css, ...dataUrls] = await Promise.all([
+        fetch(chrome.runtime.getURL("src/reader.css")).then((response) => response.text()),
+        ...sources.map(embed),
+      ]);
+      const images = new Map(sources.map((src, index) => [src, dataUrls[index]]).filter(([, dataUrl]) => dataUrl));
+      return Ics45cExporter.toHtml(this.article, { ...meta, css, images, doc: document });
+    }
+
+    download(fileName, text, type) {
+      const url = URL.createObjectURL(new Blob([text], { type }));
+      const link = h("a", { href: url, download: fileName, hidden: true });
+      this.shadow.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
 
     // Text in images (OCR) ----------------------------------------------------

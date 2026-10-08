@@ -208,9 +208,14 @@ const Ics45cConverter = (() => {
     return withText.every((span) => isMonoStyle(resolveStyle(span, ctx))) ? "code" : "text";
   }
 
-  function isBoldRow(row, ctx) {
-    const spans = textSpans(row);
-    return spans.length > 0 && spans.every((span) => isBoldStyle(resolveStyle(span, ctx)));
+  /**
+   * A row of bold labels, as in a table header. Bold monospace alone does not
+   * count: that is how Docs authors style code (a column of file names), so a
+   * row made only of it is ordinary content.
+   */
+  function isLabelRow(row, ctx) {
+    const styles = textSpans(row).map((span) => resolveStyle(span, ctx));
+    return styles.length > 0 && styles.every(isBoldStyle) && !styles.every(isMonoStyle);
   }
 
   // ---------------------------------------------------------------------------
@@ -503,7 +508,7 @@ const Ics45cConverter = (() => {
   }
 
   function isHeaderRow(first, second, cellsOf, ctx) {
-    if (isBoldRow(first, ctx) && !isBoldRow(second, ctx)) return true;
+    if (isLabelRow(first, ctx) && !isLabelRow(second, ctx)) return true;
     const background = (row) => cellsOf(row).map((cell) => resolveStyle(cell, ctx).get("background-color") ?? "");
     const firstBackgrounds = background(first);
     return (

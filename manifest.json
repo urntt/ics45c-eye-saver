@@ -20,7 +20,7 @@
   "content_scripts": [
     {
       "matches": ["https://sites.google.com/view/45c-programming-in-cpp/*"],
-      "js": ["vendor/highlight.js", "src/converter.js", "src/content.js"],
+      "js": ["vendor/highlight.js", "src/converter.js", "src/exporter.js", "src/content.js"],
       "run_at": "document_start"
     }
   ],

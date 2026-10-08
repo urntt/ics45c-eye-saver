@@ -8,7 +8,7 @@
  *
  * Usage: npm run smoke   (set CHROME_PATH to use a non-default Chrome binary)
  */
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
@@ -240,6 +240,71 @@ async function checkOcr(page) {
   );
 }
 
+/** Waits for a download to land in the output folder and returns its text. */
+async function downloaded(fileName) {
+  const file = path.join(OUTPUT, fileName);
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if ((await stat(file).catch(() => null))?.size) return readFile(file, "utf8");
+    await sleep(200);
+  }
+  throw new Error(`${fileName} was not downloaded`);
+}
+
+/** Export menu: Markdown (file and clipboard), standalone HTML, and print for PDF. */
+async function checkExport(browser, page) {
+  const files = { md: "ics45c-homework-1.md", html: "ics45c-homework-1.html", pdf: "ics45c-homework-1.pdf" };
+  await Promise.all(Object.values(files).map((name) => rm(path.join(OUTPUT, name), { force: true })));
+  const session = await browser.target().createCDPSession();
+  await session.send("Browser.setDownloadBehavior", { behavior: "allow", downloadPath: OUTPUT });
+
+  await page.setViewport(VIEWPORTS.desktop);
+  await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "dark" }]);
+  await page.goto(`${SITE}/homework-1`, { waitUntil: "domcontentloaded" });
+  await waitForReader(page);
+  const imageCount = await page.$$eval(reader("article img"), (images) => images.length);
+  const openMenu = () => page.locator(reader('[data-action="export-menu"]')).click();
+
+  await openMenu();
+  await page.locator(reader('[data-format="copy"]')).click();
+  await page.waitForFunction(() => document.getElementById("ics45c-reader").shadowRoot.querySelector(".menu-status").textContent);
+  const copied = (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, "\n");
+  await page.locator(reader('[data-format="markdown"]')).click();
+  const markdown = await downloaded(files.md);
+  check(
+    markdown === copied && markdown.startsWith("# Homework 1\n") && /^```bash$/m.test(markdown) && /^\| --- \|/m.test(markdown) &&
+      /\*Exported from \[Homework 1\]\(https:\/\/sites\.google\.com\/.*\) on \d{4}-\d{2}-\d{2}\.\*\n$/.test(markdown),
+    `export: Markdown file and clipboard copy match (${markdown.split("\n").length} lines)`,
+  );
+
+  await openMenu();
+  await page.locator(reader('[data-format="html"]')).click();
+  const html = await downloaded(files.html);
+  const embedded = (html.match(/<img [^>]*src="data:image\//g) ?? []).length;
+  check(
+    html.startsWith("<!DOCTYPE html>") && html.includes('<article class="doc">') && embedded === imageCount && imageCount > 0 &&
+      !/<img [^>]*src="http/.test(html) && !html.includes("<button"),
+    `export: HTML file is standalone (${embedded}/${imageCount} images embedded, ${Math.round(html.length / 1024)} KB)`,
+  );
+
+  // PDF goes through the print dialog; check what printing produces instead.
+  const themeDuring = await page.evaluate(() => {
+    window.dispatchEvent(new Event("beforeprint"));
+    const theme = document.getElementById("ics45c-reader").shadowRoot.querySelector(".root").dataset.theme;
+    window.dispatchEvent(new Event("afterprint"));
+    return theme;
+  });
+  const themeAfter = await page.$eval(reader(".root"), (root) => root.dataset.theme);
+  await page.emulateMediaType("print");
+  const topbarPrinted = await page.$eval(reader(".topbar"), (bar) => getComputedStyle(bar).display !== "none");
+  await page.emulateMediaType(null);
+  await page.pdf({ path: path.join(OUTPUT, files.pdf), format: "Letter", margin: { top: "14mm", bottom: "14mm", left: "14mm", right: "14mm" } });
+  const pdfSize = (await stat(path.join(OUTPUT, files.pdf))).size;
+  check(
+    themeDuring === "light" && themeAfter === "dark" && !topbarPrinted && pdfSize > 50000,
+    `export: printing uses the light theme without the reader chrome (PDF ${Math.round(pdfSize / 1024)} KB)`,
+  );
+}
+
 const browser = await puppeteer.launch({
   executablePath: process.env.CHROME_PATH ?? DEFAULT_CHROME[process.platform],
   headless: true,
@@ -287,6 +352,7 @@ try {
 
   await checkInteractions(browser, page);
   await checkOcr(page);
+  await checkExport(browser, page);
 } finally {
   await browser.close();
 }
