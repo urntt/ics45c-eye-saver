@@ -608,8 +608,9 @@
         const frame = CODE_LANGUAGES[language];
         // highlight.js escapes its input, so its HTML output is safe to insert.
         if (language) code.innerHTML = Ics45cHighlight.highlight(code.textContent, language);
-        const button = h("button", { className: "copy-btn", type: "button", "data-action": "copy" },
-          icon("copy"), h("span", { text: "Copy" }));
+        const button = h("button", {
+          className: "copy-btn", type: "button", "data-action": "copy", title: "Copy", "aria-label": "Copy code",
+        }, icon("copy"));
         const block = h("div", { className: "code-block" });
         pre.replaceWith(block);
         if (!frame) {

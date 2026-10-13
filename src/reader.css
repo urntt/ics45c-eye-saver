@@ -809,7 +809,7 @@
 /* Without a header the copy button sits on the block's corner: keep the end
    of the code clear of it. */
 .doc .code-block > pre:first-child {
-  padding-right: 96px;
+  padding-right: 52px;
 }
 
 .doc .code-head {
@@ -936,14 +936,14 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  width: 28px;
   height: 28px;
-  padding: 0 9px;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--bg);
   color: var(--text-muted);
-  font: 500 12.5px/1 var(--font-sans);
   cursor: pointer;
 }
 
