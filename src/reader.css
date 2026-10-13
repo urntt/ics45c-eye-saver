@@ -776,9 +776,15 @@
   color: inherit;
 }
 
+/* Code blocks: a frame with an optional header (language and copy button)
+   and, for source code, line numbers. */
 .doc .code-block {
   position: relative;
   margin: 0 0 1.2em;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--code-bg);
 }
 
 .doc pre {
@@ -795,7 +801,69 @@
 
 .doc .code-block pre {
   margin: 0;
-  padding-right: 52px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+/* Without a header the copy button sits on the block's corner: keep the end
+   of the code clear of it. */
+.doc .code-block > pre:first-child {
+  padding-right: 96px;
+}
+
+.doc .code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px 6px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.doc .code-lang {
+  color: var(--text-muted);
+  font: 600 12.5px/1 var(--font-sans);
+}
+
+.doc .code-line {
+  display: block;
+}
+
+/* Line numbers come from a CSS counter, so they are never selected or copied.
+   They stay in place when the code scrolls sideways, and the hanging indent
+   keeps wrapped lines (print) clear of the number column. */
+.doc .code-block.numbered pre {
+  padding-left: 0;
+}
+
+.doc .code-block.numbered code {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  counter-reset: code-line;
+}
+
+.doc .code-block.numbered .code-line {
+  padding-left: 6.5ch;
+  text-indent: -6.5ch;
+  counter-increment: code-line;
+}
+
+.doc .code-block.numbered .code-line::before {
+  content: counter(code-line);
+  position: sticky;
+  left: 0;
+  display: inline-block;
+  box-sizing: border-box;
+  width: 6.5ch;
+  padding-right: 2ch;
+  background: var(--code-bg);
+  color: var(--text-muted);
+  text-align: right;
+  text-indent: 0;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .doc pre code {
@@ -865,27 +933,33 @@
 }
 
 .doc .copy-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font: 500 12.5px/1 var(--font-sans);
+  cursor: pointer;
+}
+
+.doc .copy-btn:hover {
+  color: var(--text-strong);
+}
+
+.doc .copy-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.doc .code-block > .copy-btn {
   position: absolute;
   top: 8px;
   right: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg-raised);
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.doc .code-block:hover .copy-btn,
-.doc .copy-btn:focus-visible,
-.doc .copy-btn.copied {
-  opacity: 1;
 }
 
 .doc .copy-btn.copied {
@@ -893,7 +967,6 @@
 }
 
 @media (hover: none) {
-  .doc .copy-btn,
   .doc .ocr-btn {
     opacity: 1;
   }
@@ -1210,15 +1283,19 @@
     white-space: pre-wrap;
   }
 
-  .doc .code-block pre {
+  .doc .code-block > pre:first-child {
     padding-right: 18px;
+  }
+
+  .doc .code-block.numbered code {
+    width: auto;
   }
 
   .doc .table-wrap {
     overflow: visible;
   }
 
-  .doc pre,
+  .doc .code-block,
   .doc tr,
   .doc img,
   .doc .callout {
@@ -1233,7 +1310,7 @@
   }
 
   /* Keep the shading that carries meaning even when "Background graphics" is off. */
-  .doc pre,
+  .doc .code-block,
   .doc code,
   .doc mark,
   .doc th,

@@ -20,8 +20,9 @@ natively into the page as a reader view:
   remembered).
 - Monospace paragraphs become real code blocks with a copy button and syntax
   highlighting for C++, shell commands and Makefiles (program output stays
-  plain). Code is shown without font ligatures, so `<<` looks exactly like
-  what you type.
+  plain). C++ and Makefile blocks show their language and line numbers, shell
+  blocks their language; line numbers are never copied. Code is shown without
+  font ligatures, so `<<` looks exactly like what you type.
 - Images get a "Copy text" button: the text in the image is recognized on
   your machine (OCR), shown under the image and copied to the clipboard.
   Screenshots of code come out as code: the editor's line numbers are
@@ -99,6 +100,9 @@ sites.google.com/view/45c-programming-in-cpp/*          docs.google.com
   `google.com/url?q=` link redirects are unwrapped.
   Docs does not record a code block's language, so the converter infers it
   from the content (`detectCodeLanguage`) and marks the block `language-*`.
+  The content script frames each block accordingly (`CODE_LANGUAGES`): a
+  header with the language, and for source code one element per line so CSS
+  can number the lines without putting the numbers into the text.
 - **`src/exporter.js`** generates the exports from the reader's own DOM, so a
   file contains what the reader shows, minus its buttons. Markdown is
   GitHub-flavored (fenced code with languages, tables, alerts for callouts,

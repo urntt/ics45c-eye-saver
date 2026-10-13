@@ -13,6 +13,8 @@ const Ics45cExporter = (() => {
   "use strict";
 
   const READER_CONTROLS = "button, .ocr-panel";
+  /** Shown by the reader but redundant in Markdown, where the fence names the language. */
+  const MARKDOWN_OMITS = ".code-head";
   const BLOCK_TAGS = new Set(["P", "H1", "H2", "H3", "H4", "H5", "H6", "UL", "OL", "PRE", "TABLE", "ASIDE", "NAV", "HR", "DIV", "IFRAME"]);
   /** GitHub-style alerts, which Obsidian also renders as callouts. */
   const CALLOUT_ALERTS = { "callout-warning": "WARNING", "callout-danger": "CAUTION", "callout-tip": "TIP" };
@@ -265,6 +267,7 @@ const Ics45cExporter = (() => {
    */
   function toMarkdown(article, meta) {
     const content = contentOf(article);
+    for (const omitted of content.querySelectorAll(MARKDOWN_OMITS)) omitted.remove();
     const ctx = {
       anchors: headingAnchors(content),
       // The document title becomes the only level-1 heading; sections move down one level.

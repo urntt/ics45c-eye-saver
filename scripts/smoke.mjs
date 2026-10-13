@@ -119,6 +119,34 @@ async function checkInteractions(browser, page) {
     `code blocks are highlighted (${blocks.filter((block) => block.spans).length}/${blocks.length}), output stays plain`,
   );
 
+  // Code frames: source code has a header and line numbers, shell commands a header, other blocks neither.
+  const frames = await page.$$eval(reader(".code-block"), (codeBlocks) =>
+    codeBlocks.map((block) => ({
+      language: block.querySelector(".code-head .code-lang")?.textContent ?? null,
+      numbered: block.classList.contains("numbered"),
+      lineElements: block.querySelectorAll(".code-line").length,
+      lines: block.querySelector("pre").textContent.split("\n").length,
+      copyButton: !!block.querySelector(".copy-btn"),
+    })),
+  );
+  const framed = (language) => frames.filter((frame) => frame.language === language);
+  check(
+    framed("C++").length > 0 && framed("Makefile").length > 0 && framed("Shell").length > 0 && framed(null).length > 0 &&
+      [...framed("C++"), ...framed("Makefile")].every((frame) => frame.numbered && frame.lineElements === frame.lines) &&
+      [...framed("Shell"), ...framed(null)].every((frame) => !frame.numbered) &&
+      frames.every((frame) => frame.copyButton),
+    `code frames: ${framed("C++").length} C++ and ${framed("Makefile").length} Makefile numbered, ${framed("Shell").length} Shell, ${framed(null).length} plain`,
+  );
+  await page.$eval(reader(".code-block.numbered"), (block) => block.scrollIntoView({ block: "center" }));
+  await page.locator(reader(".code-block.numbered .copy-btn")).click();
+  await page.waitForSelector(reader(".code-block.numbered .copy-btn.copied"), { timeout: 3000 }).catch(() => null);
+  const numberedCopy = (await page.evaluate(() => navigator.clipboard.readText()).catch(() => "")).replace(/\r\n/g, "\n");
+  const numberedText = await page.$eval(reader(".code-block.numbered pre"), (pre) => pre.textContent);
+  check(
+    numberedCopy === numberedText && /^#include <iostream>\n/.test(numberedCopy) && !/^\s*\d+\s/m.test(numberedCopy),
+    "copying numbered code leaves the line numbers out",
+  );
+
   // Copy button.
   await page.$eval(reader(".code-block"), (block) => block.scrollIntoView({ block: "center" }));
   await page.hover(reader(".code-block"));
@@ -285,6 +313,7 @@ async function checkExport(browser, page) {
   const markdown = await downloaded(files.md);
   check(
     markdown === copied && markdown.startsWith("# Homework 1\n") && /^```bash$/m.test(markdown) && /^\| --- \|/m.test(markdown) &&
+      !/^(C\+\+|Shell|Makefile)$/m.test(markdown) &&
       /\*Exported from \[Homework 1\]\(https:\/\/sites\.google\.com\/.*\) on \d{4}-\d{2}-\d{2}\.\*\n$/.test(markdown),
     `export: Markdown file and clipboard copy match (${markdown.split("\n").length} lines)`,
   );

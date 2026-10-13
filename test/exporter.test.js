@@ -53,8 +53,10 @@ test("exports headings, text formatting and the source note", () => {
 
 test("exports code blocks with their language and without reader buttons", () => {
   const out = body(
-    `<div class="code-block"><pre><code class="language-cpp"><span class="hljs-meta">#include</span> &lt;iostream&gt;\n` +
-      `int x = 1; // \`tick\`</code></pre><button class="copy-btn" data-action="copy">copy</button></div>` +
+    `<div class="code-block numbered"><div class="code-head"><span class="code-lang">C++</span>` +
+      `<button class="copy-btn" data-action="copy">Copy</button></div>` +
+      `<pre><code class="language-cpp"><span class="code-line"><span class="hljs-meta">#include</span> &lt;iostream&gt;\n</span>` +
+      `<span class="code-line">int x = 1; // \`tick\`</span></code></pre></div>` +
       `<div class="code-block"><pre><code>Hello, World!</code></pre><button class="copy-btn">copy</button></div>` +
       `<p>Run <code>a\`b</code>.</p>`,
   );
@@ -119,8 +121,9 @@ test("builds a standalone HTML file with embedded images and no reader controls"
       `<p class="media"><span class="image-wrap"><img src="https://docs.google.com/docs-images-rt/abc" alt="chart">` +
       `<button class="ocr-btn">Copy text</button></span></p>` +
       `<p><span class="image-wrap"><img src="https://docs.google.com/docs-images-rt/missing" alt=""></span></p>` +
-      `<div class="code-block"><pre><code class="language-cpp"><span class="hljs-keyword">int</span> x;</code></pre>` +
-      `<button class="copy-btn">copy</button></div>`,
+      `<div class="code-block numbered"><div class="code-head"><span class="code-lang">C++</span>` +
+      `<button class="copy-btn">Copy</button></div>` +
+      `<pre><code class="language-cpp"><span class="code-line"><span class="hljs-keyword">int</span> x;</span></code></pre></div>`,
   );
   const html = Exporter.toHtml(element, {
     ...META,
@@ -138,6 +141,8 @@ test("builds a standalone HTML file with embedded images and no reader controls"
   const sources = [...page.querySelectorAll("img")].map((img) => img.getAttribute("src"));
   assert.deepEqual(sources, ["data:image/png;base64,AAAA", "https://docs.google.com/docs-images-rt/missing"]);
   assert.equal(page.querySelector(".hljs-keyword").textContent, "int", "syntax highlighting is kept");
+  assert.equal(page.querySelector(".code-block.numbered .code-head").textContent, "C++", "the language header is kept");
+  assert.equal(page.querySelectorAll(".code-line").length, 1, "line elements (numbered in CSS) are kept");
   assert.equal(page.querySelector(".export-note a").href, META.url);
   assert.equal(element.querySelectorAll("button").length, 2, "the reader's own article is not modified");
 });

@@ -24,6 +24,16 @@
   const PUBLISHED_DOC = /^https:\/\/docs\.google\.com\/document\/d\/e\/([\w-]+)\/pub(?:[?#]|$)/;
   const FRAME_HOSTS = new Set(["docs.google.com", "drive.google.com"]);
   const THEME_MODES = ["auto", "light", "dark"];
+  /**
+   * How code of each detected language is framed. Source code gets a header
+   * and line numbers; shell commands a header only (they are run one by one,
+   * not referred to by line); anything else just a copy button.
+   */
+  const CODE_LANGUAGES = {
+    cpp: { label: "C++", lineNumbers: true },
+    makefile: { label: "Makefile", lineNumbers: true },
+    bash: { label: "Shell", lineNumbers: false },
+  };
   /** Longest wait for images before printing; after that the user is told to retry. */
   const IMAGE_WAIT_MS = 15000;
   const THEME_LABELS = { auto: "Theme: follow system", light: "Theme: light", dark: "Theme: dark" };
@@ -233,6 +243,44 @@
     return svg;
   }
 
+  /**
+   * Wraps each line of a code element in its own `.code-line`, so lines can be
+   * numbered in CSS. Highlighting spans that cross a line break are closed and
+   * reopened; the text content, newlines included, stays the same.
+   */
+  function splitCodeLines(code) {
+    const lines = [];
+    const open = []; // Highlighting elements open at the current position.
+    let tip; // Innermost element of the current line.
+    const startLine = () => {
+      tip = h("span", { className: "code-line" });
+      lines.push(tip);
+      for (const element of open) tip = tip.appendChild(element.cloneNode(false));
+    };
+    const walk = (node) => {
+      for (const child of node.childNodes) {
+        if (child.nodeType === 3) {
+          child.data.split("\n").forEach((part, index) => {
+            if (index > 0) {
+              lines[lines.length - 1].append("\n");
+              startLine();
+            }
+            if (part) tip.append(part);
+          });
+        } else if (child.nodeType === 1) {
+          open.push(child);
+          tip = tip.appendChild(child.cloneNode(false));
+          walk(child);
+          open.pop();
+          tip = tip.parentNode;
+        }
+      }
+    };
+    startLine();
+    walk(code);
+    code.replaceChildren(...lines);
+  }
+
   // ---------------------------------------------------------------------------
   // Documents
 
@@ -406,7 +454,7 @@
         else if (action === "original") this.deactivate();
         else if (action === "reader") this.activate();
         else if (action === "retry") this.load();
-        else if (action === "copy") this.copyWithFeedback(actionTarget, actionTarget.parentElement.querySelector("pre").textContent);
+        else if (action === "copy") this.copyWithFeedback(actionTarget, actionTarget.closest(".code-block").querySelector("pre").textContent);
         else if (action === "ocr") this.recognizeImage(actionTarget.closest(".image-wrap"));
         else if (action === "ocr-copy") this.copyWithFeedback(actionTarget, this.ocrResults.get(actionTarget.closest(".ocr-panel")).text);
         else if (action === "ocr-close") actionTarget.closest(".ocr-panel").hidden = true;
@@ -557,14 +605,25 @@
       for (const pre of this.article.querySelectorAll("pre")) {
         const code = pre.querySelector("code");
         const language = /\blanguage-(\w+)\b/.exec(code?.className ?? "")?.[1];
+        const frame = CODE_LANGUAGES[language];
         // highlight.js escapes its input, so its HTML output is safe to insert.
         if (language) code.innerHTML = Ics45cHighlight.highlight(code.textContent, language);
-        const button = h("button", {
-          className: "copy-btn", type: "button", "data-action": "copy", title: "Copy", "aria-label": "Copy code",
-        }, icon("copy"));
+        const button = h("button", { className: "copy-btn", type: "button", "data-action": "copy" },
+          icon("copy"), h("span", { text: "Copy" }));
         const block = h("div", { className: "code-block" });
         pre.replaceWith(block);
-        block.append(pre, button);
+        if (!frame) {
+          block.append(pre, button);
+          continue;
+        }
+        block.append(
+          h("div", { className: "code-head" }, h("span", { className: "code-lang", text: frame.label }), button),
+          pre,
+        );
+        if (frame.lineNumbers) {
+          splitCodeLines(code);
+          block.classList.add("numbered");
+        }
       }
     }
 
