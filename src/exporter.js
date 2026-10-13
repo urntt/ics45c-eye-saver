@@ -12,7 +12,7 @@
 const Ics45cExporter = (() => {
   "use strict";
 
-  const READER_CONTROLS = "button, .ocr-panel";
+  const READER_CONTROLS = "button, .ocr-result";
   /** Shown by the reader but redundant in Markdown, where the fence names the language. */
   const MARKDOWN_OMITS = ".code-head";
   const BLOCK_TAGS = new Set(["P", "H1", "H2", "H3", "H4", "H5", "H6", "UL", "OL", "PRE", "TABLE", "ASIDE", "NAV", "HR", "DIV", "IFRAME"]);

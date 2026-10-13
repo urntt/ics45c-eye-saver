@@ -932,7 +932,20 @@
   color: inherit;
 }
 
-.doc .copy-btn {
+/* Buttons of a code block: in its header, or on its corner when it has none. */
+.doc .code-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.doc .code-block > .code-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.doc .code-btn {
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -947,19 +960,13 @@
   cursor: pointer;
 }
 
-.doc .copy-btn:hover {
+.doc .code-btn:hover {
   color: var(--text-strong);
 }
 
-.doc .copy-btn svg {
+.doc .code-btn svg {
   width: 15px;
   height: 15px;
-}
-
-.doc .code-block > .copy-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
 }
 
 .doc .copy-btn.copied {
@@ -1010,7 +1017,8 @@
   text-align: center;
 }
 
-/* Images with the OCR ("Copy text") button and its result panel. */
+/* Images with their OCR button. Results appear under the image as code blocks
+   (.ocr-result), framed like the document's own code. */
 .doc .image-wrap {
   position: relative;
   display: inline-block;
@@ -1028,54 +1036,42 @@
   right: 8px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 11px;
+  justify-content: center;
+  min-width: 50px;
+  height: 30px;
+  padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--bg-raised);
   box-shadow: var(--shadow);
   color: var(--text);
-  font: 500 13px/1 var(--font-sans);
+  font: 600 12.5px/1 var(--font-sans);
+  letter-spacing: 0.03em;
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s;
 }
 
 .doc .image-wrap:hover .ocr-btn,
-.doc .ocr-btn:focus-visible {
+.doc .ocr-btn:focus-visible,
+.doc .ocr-btn.busy {
   opacity: 1;
 }
 
-.doc .ocr-panel {
-  margin: 0 0 1.2em;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-raised);
-  text-align: left;
+/* While recognizing, the label gives way to a spinner. It is the only sign
+   that work is in progress, so it turns even when reduced motion is on. */
+.doc .ocr-btn.busy {
+  cursor: progress;
 }
 
-.doc .ocr-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 8px 8px 14px;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.4;
+.doc .ocr-btn.busy .ocr-label {
+  display: none;
 }
 
-.doc .ocr-status {
-  flex: 1;
-}
-
-.doc .ocr-panel.busy .ocr-status::before {
+.doc .ocr-btn.busy::before {
   content: "";
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  margin-right: 8px;
-  vertical-align: -2px;
+  width: 14px;
+  height: 14px;
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
@@ -1088,32 +1084,20 @@
   }
 }
 
-.doc .ocr-head .tool {
-  height: 30px;
+.doc .ocr-result {
+  text-align: left;
 }
 
-.doc .ocr-head .tool.copied {
-  color: var(--accent);
+/* Room for two corner buttons (copy and close) when there is no header. */
+.doc .ocr-result > pre:first-child {
+  padding-right: 86px;
 }
 
-.doc .ocr-text {
-  max-height: 22em;
-  padding: 12px 14px;
-  overflow: auto;
-  border-top: 1px solid var(--border);
-  color: var(--text);
-  font-size: 0.95em;
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-.doc .ocr-text.code {
-  color: var(--text-strong);
-  font: 14px/1.6 var(--font-mono);
-  font-feature-settings: "liga" 0, "calt" 0;
-  font-variant-ligatures: none;
-  tab-size: 4;
-  white-space: pre;
+.doc .ocr-note {
+  margin: 0;
+  padding: 14px 52px 14px 18px;
+  color: var(--text-muted);
+  font-size: 0.92em;
 }
 
 .doc .align-center {
@@ -1234,8 +1218,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .skeleton span,
-  .doc .ocr-panel.busy .ocr-status::before {
+  .skeleton span {
     animation: none;
   }
 
@@ -1254,9 +1237,9 @@
   .toc,
   .backdrop,
   .restore,
-  .copy-btn,
+  .code-actions,
   .ocr-btn,
-  .ocr-panel {
+  .ocr-result {
     display: none !important;
   }
 

@@ -227,7 +227,11 @@ async function checkInteractions(browser, page) {
   check(closedLeft < 0 && openLeft === 0 && (await sidebarLeft()) < 0, "mobile drawer opens and closes");
 }
 
-/** Clicks "Copy text" on the first image of a course page and returns the OCR panel's result. */
+/**
+ * Runs OCR on the first image of a course page and exercises the result
+ * block: the button spins meanwhile, nothing is copied until Copy is clicked,
+ * and Close hides the block until OCR is clicked again.
+ */
 async function ocrFirstImage(page, slug) {
   await page.setViewport(VIEWPORTS.desktop);
   await page.goto(`${SITE}/${slug}`, { waitUntil: "domcontentloaded" });
@@ -237,34 +241,65 @@ async function ocrFirstImage(page, slug) {
     const img = document.getElementById("ics45c-reader").shadowRoot.querySelector(".image-wrap img");
     return img.complete && img.naturalWidth > 0;
   });
+  await page.evaluate(() => {
+    // Record whether the button ever shows its spinner; recognition can be quick.
+    const button = document.getElementById("ics45c-reader").shadowRoot.querySelector(".ocr-btn");
+    window.__ocrSpun = false;
+    new MutationObserver(() => {
+      window.__ocrSpun ||= button.classList.contains("busy") && button.disabled;
+    }).observe(button, { attributes: true });
+    return navigator.clipboard.writeText("not copied yet");
+  });
+  const resultState = () =>
+    page.$eval(reader(".ocr-result"), (block) => ({
+      text: block.querySelector("pre")?.textContent ?? "",
+      language: block.querySelector(".code-head .code-lang")?.textContent ?? null,
+      numbered: block.classList.contains("numbered"),
+      hidden: block.hidden,
+      buttons: [...block.querySelectorAll(".code-actions button")].map((button) => button.dataset.action),
+    }));
+  const clipboard = async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, "\n");
+
   await page.hover(reader(".image-wrap"));
   await page.locator(reader(".ocr-btn")).click();
-  await page.waitForFunction(
-    () => {
-      const panel = document.getElementById("ics45c-reader").shadowRoot.querySelector(".ocr-panel");
-      return panel && !panel.classList.contains("busy") && panel.querySelector(".ocr-status").textContent;
-    },
-    { timeout: 90000 },
-  );
-  const result = await page.$eval(reader(".ocr-text"), (output) => ({
-    text: output.textContent,
-    code: output.classList.contains("code"),
+  await page.waitForSelector(reader(".ocr-result"), { timeout: 90000 });
+  const result = await resultState();
+  const button = await page.$eval(reader(".ocr-btn"), (element) => ({
+    label: element.textContent,
+    idle: !element.disabled && !element.classList.contains("busy"),
   }));
-  const clipboard = await page.evaluate(() => navigator.clipboard.readText()).catch(() => "");
-  return { ...result, copied: clipboard.replace(/\r\n/g, "\n") === result.text };
+  const spun = await page.evaluate(() => window.__ocrSpun);
+  const untouchedClipboard = (await clipboard()) === "not copied yet";
+
+  await page.locator(reader(".ocr-result .copy-btn")).click();
+  await page.waitForSelector(reader(".ocr-result .copy-btn.copied"), { timeout: 3000 }).catch(() => null);
+  const copied = (await clipboard()) === result.text;
+  await page.locator(reader('.ocr-result [data-action="ocr-close"]')).click();
+  const closed = (await resultState()).hidden;
+  await page.hover(reader(".image-wrap"));
+  await page.locator(reader(".ocr-btn")).click();
+  const reopened = !(await resultState()).hidden;
+
+  return {
+    ...result,
+    controls:
+      button.label === "OCR" && button.idle && spun && untouchedClipboard && copied && closed && reopened &&
+      result.buttons.join() === "copy,ocr-close",
+  };
 }
 
-/** OCR: a chart keeps Tesseract's text; a code screenshot keeps its layout. */
+/** OCR results are code blocks: plain for a chart, framed as C++ for a code screenshot. */
 async function checkOcr(page) {
   const chart = await ocrFirstImage(page, "syllabus");
   check(
-    /Grade Weighting/.test(chart.text) && /Midterm Exam/.test(chart.text) && !chart.code && chart.copied,
-    `OCR recognizes and copies the text in a chart (${chart.text.split("\n").length} lines)`,
+    /Grade Weighting/.test(chart.text) && /Midterm Exam/.test(chart.text) && chart.language === null && !chart.numbered && chart.controls,
+    `OCR shows a chart's text as a plain block; spinner, copy and close work (${chart.text.split("\n").length} lines)`,
   );
   const code = await ocrFirstImage(page, "homework-1");
   check(
-    code.code && code.copied && /^int main\(\) \{$/m.test(code.text) && /^ {4}\S/m.test(code.text) && !/^\d+ /m.test(code.text),
-    "OCR on a code screenshot drops line numbers and keeps indentation",
+    code.language === "C++" && code.numbered && code.controls &&
+      /^int main\(\) \{$/m.test(code.text) && /^ {4}\S/m.test(code.text) && !/^\d+ /m.test(code.text),
+    "OCR on a code screenshot gives a numbered C++ block without the image's line numbers, indentation kept",
   );
 }
 

@@ -91,8 +91,9 @@ test("exports callouts as alerts and images without the OCR controls", () => {
     `<aside class="callout callout-warning"><p><strong>Read carefully</strong></p><ul><li>one</li></ul></aside>` +
       `<aside class="callout"><p>Just a note.</p></aside>` +
       `<p class="media"><span class="image-wrap"><img src="https://docs.google.com/docs-images-rt/abc" alt="A [chart]">` +
-      `<button class="ocr-btn" data-action="ocr">Copy text</button></span></p>` +
-      `<div class="ocr-panel"><div class="ocr-text">recognized</div></div>`,
+      `<button class="ocr-btn" data-action="ocr">OCR</button></span></p>` +
+      `<div class="code-block ocr-result"><pre><code>recognized</code></pre>` +
+      `<div class="code-actions"><button class="code-btn copy-btn">copy</button><button class="code-btn">close</button></div></div>`,
   );
   assert.equal(
     out,
@@ -119,7 +120,7 @@ test("builds a standalone HTML file with embedded images and no reader controls"
   const { document, element } = article(
     `<h1 id="h.a">Title</h1>` +
       `<p class="media"><span class="image-wrap"><img src="https://docs.google.com/docs-images-rt/abc" alt="chart">` +
-      `<button class="ocr-btn">Copy text</button></span></p>` +
+      `<button class="ocr-btn">OCR</button></span></p>` +
       `<p><span class="image-wrap"><img src="https://docs.google.com/docs-images-rt/missing" alt=""></span></p>` +
       `<div class="code-block numbered"><div class="code-head"><span class="code-lang">C++</span>` +
       `<button class="copy-btn">Copy</button></div>` +

@@ -1,6 +1,6 @@
 /**
- * Offscreen document: runs OCR (Tesseract.js) for the reader's "Copy text"
- * button on images.
+ * Offscreen document: runs OCR (Tesseract.js) for the reader's OCR button on
+ * images.
  *
  * Tesseract needs a Web Worker and WebAssembly. A content script cannot start
  * an extension worker inside the course page, and the service worker cannot

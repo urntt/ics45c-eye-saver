@@ -10,8 +10,8 @@
  * page itself. Pages that contain anything besides supported embeds (such as
  * the home page) are left untouched.
  *
- * Within the reader, code blocks are highlighted, images get a "Copy text"
- * (OCR) button served by the service worker and src/offscreen.js, both side
+ * Within the reader, code blocks are highlighted and framed, images get an
+ * OCR button served by the service worker and src/offscreen.js, both side
  * panels can be collapsed, and the page can be exported (Ics45cExporter for
  * Markdown and HTML, the browser's print dialog for PDF). Theme and panel
  * choices persist in chrome.storage.
@@ -311,8 +311,7 @@
       this.settings = settings;
       this.headings = [];
       this.scrollFrame = 0;
-      /** OCR panel per image wrapper, and the recognized {text, code} per panel. */
-      this.ocrPanels = new WeakMap();
+      /** Per image wrapper: the block shown under it and whether recognition succeeded. */
       this.ocrResults = new WeakMap();
       this.colorScheme = matchMedia("(prefers-color-scheme: dark)");
       /** Below this width the course pages become a drawer (see reader.css). */
@@ -456,8 +455,7 @@
         else if (action === "retry") this.load();
         else if (action === "copy") this.copyWithFeedback(actionTarget, actionTarget.closest(".code-block").querySelector("pre").textContent);
         else if (action === "ocr") this.recognizeImage(actionTarget.closest(".image-wrap"));
-        else if (action === "ocr-copy") this.copyWithFeedback(actionTarget, this.ocrResults.get(actionTarget.closest(".ocr-panel")).text);
-        else if (action === "ocr-close") actionTarget.closest(".ocr-panel").hidden = true;
+        else if (action === "ocr-close") actionTarget.closest(".ocr-result").hidden = true;
         return;
       }
       const link = event.target.closest('a[href^="#"]');
@@ -601,31 +599,39 @@
       );
     }
 
-    decorateCodeBlocks() {
-      for (const pre of this.article.querySelectorAll("pre")) {
-        const code = pre.querySelector("code");
-        const language = /\blanguage-(\w+)\b/.exec(code?.className ?? "")?.[1];
-        const frame = CODE_LANGUAGES[language];
-        // highlight.js escapes its input, so its HTML output is safe to insert.
-        if (language) code.innerHTML = Ics45cHighlight.highlight(code.textContent, language);
-        const button = h("button", {
-          className: "copy-btn", type: "button", "data-action": "copy", title: "Copy", "aria-label": "Copy code",
-        }, icon("copy"));
-        const block = h("div", { className: "code-block" });
-        pre.replaceWith(block);
-        if (!frame) {
-          block.append(pre, button);
-          continue;
-        }
-        block.append(
-          h("div", { className: "code-head" }, h("span", { className: "code-lang", text: frame.label }), button),
-          pre,
-        );
-        if (frame.lineNumbers) {
-          splitCodeLines(code);
-          block.classList.add("numbered");
-        }
+    /**
+     * Frames a <pre><code> as a code block according to its language (see
+     * CODE_LANGUAGES) and returns the block. `extraButtons` follow the copy
+     * button. Used for the document's code and for OCR results alike.
+     */
+    frameCodeBlock(pre, extraButtons = []) {
+      const code = pre.querySelector("code");
+      const language = /\blanguage-(\w+)\b/.exec(code?.className ?? "")?.[1];
+      const frame = CODE_LANGUAGES[language];
+      // highlight.js escapes its input, so its HTML output is safe to insert.
+      if (language) code.innerHTML = Ics45cHighlight.highlight(code.textContent, language);
+      const actions = h("div", { className: "code-actions" },
+        h("button", {
+          className: "code-btn copy-btn", type: "button", "data-action": "copy", title: "Copy", "aria-label": "Copy code",
+        }, icon("copy")),
+        extraButtons,
+      );
+      const block = h("div", { className: "code-block" });
+      pre.replaceWith(block); // Does nothing for a <pre> that is not in the document yet.
+      if (frame) {
+        block.append(h("div", { className: "code-head" }, h("span", { className: "code-lang", text: frame.label }), actions), pre);
+      } else {
+        block.append(pre, actions);
       }
+      if (frame?.lineNumbers) {
+        splitCodeLines(code);
+        block.classList.add("numbered");
+      }
+      return block;
+    }
+
+    decorateCodeBlocks() {
+      for (const pre of this.article.querySelectorAll("pre")) this.frameCodeBlock(pre);
     }
 
     /** Copies text and briefly swaps the button's icon for a check mark. */
@@ -745,72 +751,63 @@
         }
         img.replaceWith(wrap);
         wrap.append(img, h("button", {
-          className: "ocr-btn", type: "button", "data-action": "ocr",
-          title: "Recognize and copy the text in this image",
-        }, icon("scanText"), h("span", { text: "Copy text" })));
+          className: "ocr-btn", type: "button", "data-action": "ocr", title: "Recognize the text in this image",
+        }, h("span", { className: "ocr-label", text: "OCR" })));
       }
     }
 
-    /** Runs OCR on an image, shows the text under it and copies it. */
+    /**
+     * Runs OCR on an image and shows the text under it, framed like a code
+     * block. The button spins while the recognizer works. A result is kept, so
+     * clicking again only brings it back; a failure is retried.
+     */
     async recognizeImage(wrap) {
-      let panel = this.ocrPanels.get(wrap);
-      if (!panel) {
-        panel = this.renderOcrPanel();
-        this.ocrPanels.set(wrap, panel);
-        (wrap.closest("p") ?? wrap).after(panel);
-      }
-      panel.hidden = false;
-      const status = panel.querySelector(".ocr-status");
-      const output = panel.querySelector(".ocr-text");
-      const copyButton = panel.querySelector('[data-action="ocr-copy"]');
-      if (panel.classList.contains("busy")) return;
-
-      let result = this.ocrResults.get(panel);
-      if (result === undefined) {
-        panel.classList.add("busy");
-        status.textContent = "Recognizing text… (the first run loads the OCR engine)";
-        try {
-          const response = await chrome.runtime.sendMessage({ type: "ocr-image", src: wrap.querySelector("img").src });
-          if (!response?.ok) throw new Error(response?.error ?? "The extension did not answer");
-          result = { text: response.text, code: response.code };
-          this.ocrResults.set(panel, result);
-        } catch (error) {
-          console.error("[ICS 45C Eye Saver] OCR failed", error);
-          status.textContent = `Could not recognize text: ${error?.message ?? error}`;
-          return;
-        } finally {
-          panel.classList.remove("busy");
-        }
-      }
-
-      const { text, code } = result;
-      output.textContent = text;
-      // Code screenshots come back with their indentation: show them on a monospace grid.
-      output.classList.toggle("code", code);
-      output.hidden = !text;
-      copyButton.hidden = !text;
-      if (!text) {
-        status.textContent = "No text found in this image.";
+      const previous = this.ocrResults.get(wrap);
+      if (previous?.ok) {
+        previous.block.hidden = false;
         return;
       }
-      const copied = await this.copyWithFeedback(copyButton, text);
-      status.textContent = copied
-        ? "Text copied. Machine-recognized, so double-check it."
-        : "Select the text below to copy it. Machine-recognized, so double-check it.";
+      previous?.block.remove();
+      const button = wrap.querySelector(".ocr-btn");
+      button.disabled = true;
+      button.classList.add("busy");
+      let result;
+      try {
+        const response = await chrome.runtime.sendMessage({ type: "ocr-image", src: wrap.querySelector("img").src });
+        if (!response?.ok) throw new Error(response?.error ?? "The extension did not answer");
+        const block = response.text ? this.renderOcrText(response) : this.renderOcrNote("No text found in this image.");
+        result = { ok: true, block };
+      } catch (error) {
+        console.error("[ICS 45C Eye Saver] OCR failed", error);
+        result = { ok: false, block: this.renderOcrNote(`Could not recognize text: ${error?.message ?? error}`) };
+      } finally {
+        button.disabled = false;
+        button.classList.remove("busy");
+      }
+      this.ocrResults.set(wrap, result);
+      (wrap.closest("p") ?? wrap).after(result.block);
     }
 
-    renderOcrPanel() {
-      return h("div", { className: "ocr-panel", role: "region", "aria-label": "Text in image", "aria-live": "polite" },
-        h("div", { className: "ocr-head" },
-          h("span", { className: "ocr-status" }),
-          h("button", { className: "tool", type: "button", "data-action": "ocr-copy", hidden: true },
-            icon("copy"), h("span", { text: "Copy" })),
-          h("button", {
-            className: "tool icon-only", type: "button", "data-action": "ocr-close",
-            title: "Close", "aria-label": "Close",
-          }, icon("close")),
-        ),
-        h("div", { className: "ocr-text", hidden: true }),
+    ocrCloseButton() {
+      return h("button", {
+        className: "code-btn", type: "button", "data-action": "ocr-close", title: "Close", "aria-label": "Close",
+      }, icon("close"));
+    }
+
+    /** Recognized text as a code block; a code screenshot gets its language's frame. */
+    renderOcrText({ text, code }) {
+      const language = code ? Ics45cConverter.detectCodeLanguage(text) : null;
+      const pre = h("pre", {}, h("code", { className: language && `language-${language}`, text }));
+      const block = this.frameCodeBlock(pre, [this.ocrCloseButton()]);
+      block.classList.add("ocr-result");
+      return block;
+    }
+
+    /** A message where a result would be: nothing was found, or recognition failed. */
+    renderOcrNote(message) {
+      return h("div", { className: "code-block ocr-result", role: "status" },
+        h("p", { className: "ocr-note", text: message }),
+        h("div", { className: "code-actions" }, this.ocrCloseButton()),
       );
     }
 

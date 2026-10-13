@@ -23,10 +23,11 @@ natively into the page as a reader view:
   plain). C++ and Makefile blocks show their language and line numbers, shell
   blocks their language; line numbers are never copied. Code is shown without
   font ligatures, so `<<` looks exactly like what you type.
-- Images get a "Copy text" button: the text in the image is recognized on
-  your machine (OCR), shown under the image and copied to the clipboard.
-  Screenshots of code come out as code: the editor's line numbers are
-  removed and indentation is kept.
+- Images get an **OCR** button: the text in the image is recognized on your
+  machine and shown under the image as a code block with its own copy and
+  close buttons. Screenshots of code come out as code: the editor's line
+  numbers are removed, indentation is kept, and the block is framed and
+  highlighted by its language like the document's own code.
 - Tables get header rows, one-cell tables become callout boxes (warning,
   tip, …), links to sections jump in place, and the Back button returns to
   where you were.
@@ -62,7 +63,7 @@ sites.google.com/view/45c-programming-in-cpp/*          docs.google.com
 │  1. read embed code from [data-code] tiles   ├───────►│  fetch .../pub?       │
 │  2. build shadow-DOM reader, hide Sites UI   │◄───────┤  embedded=true        │
 │  3. converter.js: Docs HTML -> clean DOM     │  HTML  └──────────┬────────────┘
-│  4. "Copy text" on an image                  │  text             │ OCR request
+│  4. OCR button on an image                   │  text             │ OCR request
 └──────────────────────────────────────────────┘        ┌──────────▼────────────┐
                                                         │ offscreen.html        │
                                                         │  Tesseract.js worker  │
@@ -174,7 +175,7 @@ Because it depends on the live site, run it after changes to
 - OCR recognizes English only and works on images embedded in the published
   Docs. Recognition is not perfect, especially for small text in charts, and
   Tesseract tends to miss a character that stands alone on a line (such as a
-  closing `}`), so double-check what it copies.
+  closing `}`), so double-check the result.
 - Exported Markdown links to images on Google's servers rather than embedding
   them, so they need a connection and follow later changes to the document;
   use the HTML or PDF export for a self-contained copy. Markdown has no text
