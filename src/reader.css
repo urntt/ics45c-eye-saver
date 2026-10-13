@@ -1037,16 +1037,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 50px;
-  height: 30px;
-  padding: 0 10px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--bg-raised);
   box-shadow: var(--shadow);
   color: var(--text);
-  font: 600 12.5px/1 var(--font-sans);
-  letter-spacing: 0.03em;
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s;
@@ -1058,13 +1056,13 @@
   opacity: 1;
 }
 
-/* While recognizing, the label gives way to a spinner. It is the only sign
+/* While recognizing, the icon gives way to a spinner. It is the only sign
    that work is in progress, so it turns even when reduced motion is on. */
 .doc .ocr-btn.busy {
   cursor: progress;
 }
 
-.doc .ocr-btn.busy .ocr-label {
+.doc .ocr-btn.busy svg {
   display: none;
 }
 

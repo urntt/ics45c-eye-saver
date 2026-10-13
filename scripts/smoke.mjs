@@ -265,7 +265,7 @@ async function ocrFirstImage(page, slug) {
   await page.waitForSelector(reader(".ocr-result"), { timeout: 90000 });
   const result = await resultState();
   const button = await page.$eval(reader(".ocr-btn"), (element) => ({
-    label: element.textContent,
+    iconOnly: !!element.querySelector("svg") && element.textContent === "",
     idle: !element.disabled && !element.classList.contains("busy"),
   }));
   const spun = await page.evaluate(() => window.__ocrSpun);
@@ -283,7 +283,7 @@ async function ocrFirstImage(page, slug) {
   return {
     ...result,
     controls:
-      button.label === "OCR" && button.idle && spun && untouchedClipboard && copied && closed && reopened &&
+      button.iconOnly && button.idle && spun && untouchedClipboard && copied && closed && reopened &&
       result.buttons.join() === "copy,ocr-close",
   };
 }

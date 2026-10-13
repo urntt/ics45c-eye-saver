@@ -751,8 +751,9 @@
         }
         img.replaceWith(wrap);
         wrap.append(img, h("button", {
-          className: "ocr-btn", type: "button", "data-action": "ocr", title: "Recognize the text in this image",
-        }, h("span", { className: "ocr-label", text: "OCR" })));
+          className: "ocr-btn", type: "button", "data-action": "ocr",
+          title: "Recognize the text in this image (OCR)", "aria-label": "Recognize the text in this image",
+        }, icon("scanText")));
       }
     }
 
