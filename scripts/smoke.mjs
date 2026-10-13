@@ -298,8 +298,9 @@ async function checkOcr(page) {
   const code = await ocrFirstImage(page, "homework-1");
   check(
     code.language === "C++" && code.numbered && code.controls &&
-      /^int main\(\) \{$/m.test(code.text) && /^ {4}\S/m.test(code.text) && !/^\d+ /m.test(code.text),
-    "OCR on a code screenshot gives a numbered C++ block without the image's line numbers, indentation kept",
+      /^int main\(\) \{$/m.test(code.text) && /^ {4}\S/m.test(code.text) && !/^\d+ /m.test(code.text) &&
+      code.text.endsWith("endl;\n}"),
+    "OCR on a code screenshot gives a numbered C++ block: no image line numbers, indentation and the final lone brace kept",
   );
 }
 

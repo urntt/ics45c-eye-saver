@@ -9,6 +9,10 @@
  * indentation and alignment spaces are restored from the x positions.
  * Anything else (charts, prose) keeps Tesseract's own text.
  *
+ * Tesseract also tends to attach a glyph that stands alone on a short line (a
+ * closing brace) to the line above and to misread it there (")" for "}"). Such
+ * words are put back on the line they sit on and re-read on their own.
+ *
  * Loaded as a classic script by src/offscreen.html and as a CommonJS module
  * by the Node tests.
  */
@@ -25,14 +29,14 @@ const Ics45cOcrLayout = (() => {
   const MONOSPACE_MIN_PAIRS = 4;
   /** Share of lines that must carry the expected line number to count as a gutter. */
   const GUTTER_MIN_SHARE = 0.6;
-  /** What OCR makes of an editor's vertical indent guides. */
-  const INDENT_GUIDE = /^[|!()[\]Il1]$/;
 
   function median(values) {
     const sorted = [...values].sort((a, b) => a - b);
     const middle = sorted.length >> 1;
     return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
   }
+
+  const middleOf = (word) => (word.y0 + word.y1) / 2;
 
   /** Flattens Tesseract's blocks into lines of words, top to bottom. */
   function linesOf(blocks) {
@@ -42,7 +46,7 @@ const Ics45cOcrLayout = (() => {
         for (const line of paragraph.lines ?? []) {
           const words = (line.words ?? [])
             .filter((word) => word.text.trim())
-            .map((word) => ({ text: word.text.trim(), x0: word.bbox.x0, x1: word.bbox.x1 }));
+            .map((word) => ({ text: word.text.trim(), ...word.bbox }));
           if (words.length) lines.push({ y0: line.bbox.y0, words });
         }
       }
@@ -51,11 +55,33 @@ const Ics45cOcrLayout = (() => {
   }
 
   /**
+   * Puts each word on the line it actually sits on: a word whose vertical
+   * middle is nearer to a neighbouring line than to its own is moved there
+   * and marked `moved`.
+   */
+  function rehomeWords(lines) {
+    const middles = lines.map((line) => median(line.words.map(middleOf)));
+    const result = lines.map((line) => ({ ...line, words: [] }));
+    lines.forEach((line, index) => {
+      for (const word of line.words) {
+        let home = index;
+        for (const neighbour of [index - 1, index + 1]) {
+          if (neighbour < 0 || neighbour >= lines.length) continue;
+          if (Math.abs(middleOf(word) - middles[neighbour]) < Math.abs(middleOf(word) - middles[home])) home = neighbour;
+        }
+        result[home].words.push(home === index ? word : { ...word, moved: true });
+      }
+    });
+    for (const line of result) line.words.sort((a, b) => a.x0 - b.x0);
+    return result.filter((line) => line.words.length);
+  }
+
+  /**
    * Removes a gutter of increasing line numbers (1, 2, 3, ...). A number that
    * OCR glued to the code ("31};") is split off; such a line loses its x
-   * position and is placed at column 0. Misread numbers (")" for "12") are
-   * dropped by position: anything ending left of the code column is gutter.
-   * Returns null when there is no gutter.
+   * position and is placed at column 0. Anything else that ends left of the
+   * code column (a misread number) is gutter too. Returns null when there is
+   * no gutter.
    */
   function stripLineNumbers(lines) {
     let previous = null;
@@ -99,22 +125,17 @@ const Ics45cOcrLayout = (() => {
   }
 
   /**
-   * Drops editor indent guides: a lone bar-like character followed by a wide
-   * gap at the start of a line (real code never starts with ")" and spaces).
+   * Re-reads single glyphs that were moved to another line: recognized as part
+   * of the wrong line they are often misread, on their own they are not.
    */
-  function dropIndentGuides(lines, pitch) {
-    return lines.map((line) => {
-      let words = line.words;
-      while (
-        words.length > 1 &&
-        words[0].x1 !== null &&
-        INDENT_GUIDE.test(words[0].text) &&
-        words[1].x0 - words[0].x1 >= 2 * pitch
-      ) {
-        words = words.slice(1);
+  async function rereadMovedGlyphs(lines, rereadGlyph) {
+    for (const { words } of lines) {
+      for (const word of words) {
+        if (!word.moved || word.text.length !== 1) continue;
+        const text = (await rereadGlyph({ x0: word.x0, y0: word.y0, x1: word.x1, y1: word.y1 })).trim();
+        if (text.length === 1) word.text = text;
       }
-      return { ...line, words };
-    });
+    }
   }
 
   /** Places each line's words on the character grid, starting at the leftmost word. */
@@ -132,18 +153,20 @@ const Ics45cOcrLayout = (() => {
 
   /**
    * @param {{text: string, blocks?: object[]}} data Tesseract's result with blocks.
-   * @returns {{text: string, code: boolean}} `code` is true when the layout
-   *   was rebuilt on a monospace grid (show it in a monospace font).
+   * @param {(box: {x0: number, y0: number, x1: number, y1: number}) => Promise<string>} [rereadGlyph]
+   *   Recognizes the single character inside a box of the same image.
+   * @returns {Promise<{text: string, code: boolean}>} `code` is true when the
+   *   layout was rebuilt on a monospace grid (show it in a monospace font).
    */
-  function format(data) {
+  async function format(data, rereadGlyph) {
     const plain = { text: (data.text ?? "").trim(), code: false };
-    const lines = linesOf(data.blocks);
+    const lines = rehomeWords(linesOf(data.blocks));
     if (lines.length < 2) return plain;
-    const numbered = stripLineNumbers(lines);
-    const content = numbered ?? lines;
+    const content = stripLineNumbers(lines) ?? lines;
     const pitch = monospacePitch(content);
     if (!pitch) return plain;
-    const text = layOut(dropIndentGuides(content, pitch), pitch)
+    if (rereadGlyph) await rereadMovedGlyphs(content, rereadGlyph);
+    const text = layOut(content, pitch)
       .map((line) => line.trimEnd())
       .join("\n")
       .replace(/^\n+|\n+$/g, "");

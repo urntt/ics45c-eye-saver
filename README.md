@@ -89,8 +89,11 @@ sites.google.com/view/45c-programming-in-cpp/*          docs.google.com
 - **`src/ocr-layout.js`** post-processes the OCR result. Tesseract's text
   drops leading whitespace and keeps line-number gutters, so when the words
   sit on a monospace grid (code, terminal output) the text is rebuilt from the
-  word positions: the gutter and misread indent guides are removed and
-  indentation is restored. Charts and prose keep Tesseract's text.
+  word positions: the gutter is removed and indentation is restored. Tesseract
+  also attaches a glyph that stands alone on a line (a closing `}`) to the
+  line above and misreads it there; such words are moved back to the line
+  they sit on and re-read as a single character. Charts and prose keep
+  Tesseract's text.
 - **`src/converter.js`** turns the published HTML into semantic markup. Google
   Docs expresses all formatting through generated classes (`.c12{…}`), so the
   converter resolves those classes against the document's stylesheet and maps
@@ -173,9 +176,8 @@ Because it depends on the live site, run it after changes to
 - Google Drive files other than published Docs (PDFs, Slides, …) are shown in a
   full-height frame rather than converted.
 - OCR recognizes English only and works on images embedded in the published
-  Docs. Recognition is not perfect, especially for small text in charts, and
-  Tesseract tends to miss a character that stands alone on a line (such as a
-  closing `}`), so double-check the result.
+  Docs. Recognition is not perfect, especially for small text in charts, so
+  double-check the result.
 - Exported Markdown links to images on Google's servers rather than embedding
   them, so they need a connection and follow later changes to the document;
   use the HTML or PDF export for a self-contained copy. Markdown has no text
